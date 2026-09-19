@@ -1,0 +1,6 @@
+lighter-sdk @ git+https://github.com/elliottech/lighter-python.git
+web3>=7.0
+eth-account>=0.13
+requests>=2.31
+python-dotenv>=1.0
+pytest>=8.0

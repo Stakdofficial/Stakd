@@ -1,0 +1,55 @@
+# ---- Secrets: never commit ----
+.env
+.env.*
+!.env.example
+*.bak
+*.bak*
+*.pem
+*.key
+*keys*.json
+keeper/new-keeper-address.txt
+
+# ---- Runtime state & logs ----
+*.log
+keeper/keeper-state*.json
+keeper/cash-out.json
+keeper/return-to-arc.json
+keeper/*.plist
+
+# ---- Brand assets & media ----
+brand/
+*.mp4
+*.mov
+*.webm
+*.mp3
+*.wav
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.ico
+*.pdf
+
+# ---- Legacy ----
+archive/
+
+# ---- Build output & dependencies ----
+node_modules/
+.next/
+.vercel/
+*.tsbuildinfo
+contracts/out/
+contracts/cache/
+contracts/lib/
+contracts/broadcast/
+contracts/verify/
+keeper/.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+
+# ---- OS ----
+.DS_Store
