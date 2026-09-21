@@ -101,6 +101,25 @@ export const quoterAbi = [
  */
 export const ORDER_FACTORY = (process.env.NEXT_PUBLIC_ORDER_FACTORY ?? "0x5Ab981B9565F0Ec3d0Dfc26Bd6957D7Dac507594") as Address;
 
+/**
+ * An order factory buys through one cross-chain router, which serves one Stakd factory. Older factories that have
+ * their own keep them here as `factory:orderFactory` pairs (`NEXT_PUBLIC_FACTORY_ORDER_FACTORIES`); the current
+ * factory uses `ORDER_FACTORY`. A factory with neither has no Solana route.
+ */
+const ORDER_FACTORY_BY_FACTORY: Record<string, Address> = Object.fromEntries(
+  (process.env.NEXT_PUBLIC_FACTORY_ORDER_FACTORIES ?? "")
+    .split(",")
+    .map((pair) => pair.trim().split(":"))
+    .filter(([f, o]) => /^0x[0-9a-fA-F]{40}$/.test(f ?? "") && /^0x[0-9a-fA-F]{40}$/.test(o ?? ""))
+    .map(([f, o]) => [f.toLowerCase(), o as Address]),
+);
+
+export function orderFactoryFor(factory: Address | undefined): Address | undefined {
+  if (!factory) return undefined;
+  if (factory.toLowerCase() === FACTORY.toLowerCase()) return ORDER_FACTORY;
+  return ORDER_FACTORY_BY_FACTORY[factory.toLowerCase()];
+}
+
 export const orderFactoryAbi = [
   {
     type: "function",

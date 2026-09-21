@@ -11,7 +11,7 @@ import { BuyFromSolana } from "@/components/BuyFromSolana";
 import { CoinActivity } from "@/components/CoinActivity";
 import { useQuery } from "@tanstack/react-query";
 import { factoryAbi, hookAbi, routerAbi, tokenAbi, treasuryAbi } from "@/lib/abis";
-import { chain, erc20Abi, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, POOL_MANAGER, poolManagerAbi, quoterAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
+import { chain, erc20Abi, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, orderFactoryFor, POOL_MANAGER, poolManagerAbi, quoterAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
 import { useCoinFactory, useEthPrice, useLighterAccount, useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 import { decodePoolState, ethPerToken, POOL_STATE_SLOTS, poolStateSlot, sqrtPriceFromSlots } from "@/lib/pool";
@@ -285,9 +285,9 @@ function TradePanel({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // Trade through the router belonging to this coin's own factory, not whichever factory is current.
-  // Buying from Solana goes through the cross-chain router, which only knows the current factory's coins, so
-  // the option is offered on those alone — an order for a legacy coin could be funded but never filled.
-  const { factory: coinFactory, isLegacy } = useCoinFactory(token);
+  const { factory: coinFactory } = useCoinFactory(token);
+  // Solana buys go through the order factory of the coin's own factory; factories without one have no Solana route.
+  const orderFactory = orderFactoryFor(coinFactory);
   const router = useReadContract({
     address: coinFactory ?? ("0x0000000000000000000000000000000000000000" as Address),
     abi: factoryAbi,
@@ -492,7 +492,7 @@ function TradePanel({
                     ? `Buy ${symbol}`
                     : `Sell ${symbol}`)}
       </button>
-      {side === "buy" && !isLegacy && coinFactory && <BuyFromSolana token={token} symbol={symbol} />}
+      {side === "buy" && orderFactory && <BuyFromSolana token={token} symbol={symbol} orderFactory={orderFactory} />}
     </div>
   );
 }

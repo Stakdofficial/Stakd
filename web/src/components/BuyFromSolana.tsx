@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { formatUnits, type Address, type Hex } from "viem";
 import { useAccount, useReadContract, useWriteContract, usePublicClient } from "wagmi";
-import { chain, explorerAddress, ORDER_FACTORY, orderFactoryAbi } from "@/lib/config";
+import { chain, explorerAddress, orderFactoryAbi } from "@/lib/config";
 
 /**
  * Buying this coin with SOL.
@@ -15,7 +15,7 @@ import { chain, explorerAddress, ORDER_FACTORY, orderFactoryAbi } from "@/lib/co
  * The fee is the same as buying here — the difference is where it goes: a cross-chain buy's share of the fee
  * buys the coin back and burns it, rather than funding the coin's portfolio.
  */
-export function BuyFromSolana({ token, symbol }: { token: Address; symbol: string }) {
+export function BuyFromSolana({ token, symbol, orderFactory: ORDER_FACTORY }: { token: Address; symbol: string; orderFactory: Address }) {
   const { address, isConnected } = useAccount();
   const client = usePublicClient();
   const { writeContractAsync } = useWriteContract();
