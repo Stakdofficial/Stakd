@@ -7,6 +7,7 @@ import { useAccount, usePublicClient, useReadContract, useWriteContract } from "
 import { avgLeverage, Basket } from "@/components/Basket";
 import { ImagePicker } from "@/components/ImagePicker";
 import { factoryAbi, hookAbi } from "@/lib/abis";
+import { profileLink } from "@/lib/links";
 import { chain, FACTORY, metadataAbi, metadataFor } from "@/lib/config";
 import { useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd, type LighterMarket } from "@/lib/lighter";
@@ -145,9 +146,9 @@ export default function CreatePage() {
               {
                 image: profile.image.trim(),
                 description: profile.description.trim(),
-                telegram: profile.telegram.trim(),
-                x: profile.x.trim(),
-                website: profile.website.trim(),
+                telegram: profileLink(profile.telegram, "telegram") ?? profile.telegram.trim(),
+                x: profileLink(profile.x, "x") ?? profile.x.trim(),
+                website: profileLink(profile.website, "website") ?? profile.website.trim(),
               },
             ],
           });

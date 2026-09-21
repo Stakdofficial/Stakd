@@ -10,6 +10,7 @@ import { LiveChart } from "@/components/LiveChart";
 import { BuyFromSolana } from "@/components/BuyFromSolana";
 import { CoinActivity } from "@/components/CoinActivity";
 import { useQuery } from "@tanstack/react-query";
+import { profileLink } from "@/lib/links";
 import { factoryAbi, hookAbi, routerAbi, tokenAbi, treasuryAbi } from "@/lib/abis";
 import { chain, erc20Abi, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, orderFactoryFor, POOL_MANAGER, poolManagerAbi, quoterAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
 import { useCoinFactory, useEthPrice, useLighterAccount, useMarkets, type Leg } from "@/lib/hooks";
@@ -113,10 +114,10 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
 
   const profile = meta.data as { image: string; description: string; telegram: string; x: string; website: string } | undefined;
   const socials = [
-    { label: "Telegram", href: profile?.telegram },
-    { label: "X", href: profile?.x },
-    { label: "Website", href: profile?.website },
-  ].filter((l): l is { label: string; href: string } => !!l.href && /^https?:\/\//i.test(l.href));
+    { label: "Telegram", href: profileLink(profile?.telegram, "telegram") },
+    { label: "X", href: profileLink(profile?.x, "x") },
+    { label: "Website", href: profileLink(profile?.website, "website") },
+  ].filter((l): l is { label: string; href: string } => !!l.href);
   const isCreator = !!address && !!coin.data?.creator && address.toLowerCase() === coin.data.creator.toLowerCase();
 
   return (
@@ -547,7 +548,16 @@ function ProfileEditor({
         address: metadata,
         abi: metadataAbi,
         functionName: "setMetadata",
-        args: [token, form],
+        // Store full links, so every reader sees the same thing.
+        args: [
+          token,
+          {
+            ...form,
+            telegram: profileLink(form.telegram, "telegram") ?? form.telegram.trim(),
+            x: profileLink(form.x, "x") ?? form.x.trim(),
+            website: profileLink(form.website, "website") ?? form.website.trim(),
+          },
+        ],
       });
       await client?.waitForTransactionReceipt({ hash });
       setMsg({ ok: true, text: "Profile saved" });
