@@ -181,7 +181,8 @@ export default function Whitepaper() {
           <p>
             The creator chooses a fee between <b>1% and 5%</b> at launch. It cannot be changed afterwards. The hook enforces a
             hard maximum of 5%, and on coins launched with the newest hook the fee also responds to the market within that cap
-            (see <a href="#market-fees" style={link}>market-aware fees</a> below).
+            (see <a href="#market-fees" style={link}>market-aware fees</a> below). Those coins also pay their creator a
+            separate <b>1% creator fee</b> on every trade, so the most any trade can cost is 6%.
           </p>
           <ul>
             <li>The fee is always taken in <b>ETH</b>, never in the coin, so fee collection never creates sell pressure.</li>
@@ -191,6 +192,12 @@ export default function Whitepaper() {
             </li>
             <li>Accrued fees can be collected by anyone and are paid only to that coin&apos;s treasury.</li>
           </ul>
+          <p>
+            <b>Creator fee.</b> On coins launched with the newest hook, every buy and sell also pays <b>1% in ETH to the
+            coin&apos;s creator</b>, on top of the coin&apos;s fee. It is kept apart from the split below, so the portfolio,
+            the platform and buybacks receive exactly what they did before. Buys from other chains pay it too. Creators claim
+            it from the coin&apos;s treasury, and only the creator can receive it.
+          </p>
           <div className="table-wrap">
             <table className="table">
               <thead>
@@ -213,7 +220,7 @@ export default function Whitepaper() {
                 </tr>
                 <tr>
                   <td><b>0%</b></td>
-                  <td>Creator</td>
+                  <td>Creator (new coins also pay a separate 1% creator fee, above)</td>
                   <td>0 ETH</td>
                 </tr>
               </tbody>
@@ -242,7 +249,8 @@ export default function Whitepaper() {
           <h3 id="market-fees">Market-aware fees</h3>
           <p>
             Coins launched with the newest hook keep the creator&apos;s fee as their <b>base</b>, and the hook adjusts it to the
-            market on every swap. All of it is enforced in the hook, applies to every trade, and never takes the fee above 5%.
+            market on every swap. All of it is enforced in the hook, applies to every trade, and never takes the coin&apos;s fee
+            above 5%.
           </p>
           <ul>
             <li>

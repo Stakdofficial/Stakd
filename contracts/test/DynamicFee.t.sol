@@ -55,8 +55,10 @@ contract DynamicFeeTest is LeveredTestBase {
         vm.stopPrank();
     }
 
+    /// The coin's own fee (bps): what `currentFee` quotes, minus the fixed creator fee on top.
     function _fee(LeveredToken tok, bool isSell, address who) internal view returns (uint16 fee) {
         (fee,) = hook.currentFee(_poolId(tok), isSell, who);
+        fee -= hook.CREATOR_FEE_BPS();
     }
 
     function _defending(LeveredToken tok) internal view returns (bool on) {
@@ -70,7 +72,7 @@ contract DynamicFeeTest is LeveredTestBase {
     }
 
     function _allPending(PoolId id) internal view returns (uint256) {
-        return hook.pendingFees(id) + hook.pendingCrossChainFees(id) + hook.pendingDefendFees(id);
+        return hook.pendingFees(id) + hook.pendingCrossChainFees(id) + hook.pendingDefendFees(id) + hook.pendingCreatorFees(id);
     }
 
     /// Reference copy of the hook's decay, to check its numbers independently of its storage.
@@ -117,9 +119,13 @@ contract DynamicFeeTest is LeveredTestBase {
 
         assertEq(_fee(tok, true, alice), hook.MAX_FEE_BPS());
         uint256 before = hook.pendingFees(id);
+        uint256 creatorBefore = hook.pendingCreatorFees(id);
         uint256 ethOut = _sellAs(alice, tok, got / 2);
         uint256 sellFee = hook.pendingFees(id) - before;
-        assertApproxEqAbs(sellFee, (ethOut + sellFee) * 500 / 10_000, 1, "5% of the ETH the sale is worth");
+        uint256 creatorFee = hook.pendingCreatorFees(id) - creatorBefore;
+        uint256 gross = ethOut + sellFee + creatorFee;
+        assertApproxEqAbs(sellFee, gross * 500 / 10_000, 1, "5% of the ETH the sale is worth");
+        assertApproxEqAbs(creatorFee, gross / 100, 1, "plus the creator's 1%");
     }
 
     function test_quickFlip_sameBlockSandwichBackLegPaysMaxFee() public {
@@ -154,9 +160,11 @@ contract DynamicFeeTest is LeveredTestBase {
         assertEq(_fee(tok, true, bob), FEE_BPS);
         PoolId id = _poolId(tok);
         uint256 before = hook.pendingFees(id);
+        uint256 creatorBefore = hook.pendingCreatorFees(id);
         uint256 ethOut = _sellAs(bob, tok, bobTokens);
         uint256 sellFee = hook.pendingFees(id) - before;
-        assertApproxEqAbs(sellFee, (ethOut + sellFee) * FEE_BPS / 10_000, 1);
+        uint256 gross = ethOut + sellFee + hook.pendingCreatorFees(id) - creatorBefore;
+        assertApproxEqAbs(sellFee, gross * FEE_BPS / 10_000, 1);
     }
 
     function test_quickFlip_isTrackedPerCoin() public {
@@ -381,11 +389,93 @@ contract DynamicFeeTest is LeveredTestBase {
         assertEq(t.totalFeesReceived(), 0);
     }
 
+    // ---------------------------------------------------------------- creator fee
+
+    function test_creator_getsOnePercentOfEveryTradeInEth() public {
+        (LeveredToken tok, LeveredTreasury t) = _create();
+        PoolId id = _poolId(tok);
+        uint256 got = _buyAs(alice, tok, 1 ether);
+        assertEq(hook.pendingCreatorFees(id), 0.01 ether, "1% of the buy");
+        assertEq(hook.pendingFees(id), 0.02 ether, "the coin's 2% is unchanged");
+        assertEq(tok.balanceOf(address(hook)), 0, "no fee is ever taken in the coin");
+
+        vm.warp(block.timestamp + 1 days);
+        uint256 ethOut = _sellAs(alice, tok, got);
+        uint256 onSell = hook.pendingCreatorFees(id) - 0.01 ether;
+        uint256 coinOnSell = hook.pendingFees(id) - 0.02 ether;
+        assertApproxEqAbs(onSell, (ethOut + onSell + coinOnSell) / 100, 1, "1% of the sale too");
+
+        uint256 creatorFees = hook.pendingCreatorFees(id);
+        hook.collectCreatorFees(id);
+        hook.collectFees(id);
+        assertEq(t.totalCreatorFees(), creatorFees);
+        // The creator's 1% is all theirs; the coin's fee still splits 60/40 with nothing to the creator.
+        assertEq(t.creatorOwed(), creatorFees);
+        assertEq(t.marginReserve() + t.protocolOwed(), t.totalFeesReceived());
+
+        uint256 before = creator.balance;
+        vm.prank(trader); // anyone may trigger the payout; it can only go to the creator
+        t.claimCreatorFees();
+        assertEq(creator.balance - before, creatorFees);
+        assertEq(t.creatorOwed(), 0);
+    }
+
+    function test_creator_paidOnSolanaBuysToo() public {
+        (LeveredToken tok,) = _create();
+        PoolId id = _poolId(tok);
+        vm.deal(bob, 1 ether);
+        vm.prank(bob, bob);
+        xRouter.buy{value: 1 ether}(address(tok), 0, bob);
+        assertEq(hook.pendingCreatorFees(id), 0.01 ether, "creator gets 1% of a cross-chain buy");
+        assertEq(hook.pendingCrossChainFees(id), 0.02 ether, "the coin's 2% still goes to burn");
+    }
+
+    function test_creator_paidDuringDefendMode() public {
+        (LeveredToken tok,) = _create();
+        PoolId id = _poolId(tok);
+        _crash(tok, 5_000);
+        uint256 creatorBefore = hook.pendingCreatorFees(id);
+        uint256 defendBefore = hook.pendingDefendFees(id);
+        _buyAs(bob, tok, 1 ether);
+        assertEq(hook.pendingCreatorFees(id) - creatorBefore, 0.01 ether);
+        assertEq(hook.pendingDefendFees(id) - defendBefore, 0.02 ether);
+    }
+
+    function test_creator_totalNeverAboveSixPercent() public {
+        (LeveredToken tok,) = _createWithFee(500);
+        PoolId id = _poolId(tok);
+        uint256 got = _buyAs(alice, tok, 5 ether); // pump, and Alice can quick-flip
+        vm.warp(block.timestamp + 1);
+        (uint16 buyFee,) = hook.currentFee(id, false, bob);
+        (uint16 flipFee,) = hook.currentFee(id, true, alice);
+        assertEq(buyFee, 600, "5% coin cap + 1% creator");
+        assertEq(flipFee, 600, "quick flip is 5% + 1% too");
+
+        uint256 before = _allPending(id);
+        uint256 ethOut = _sellAs(alice, tok, got / 10);
+        uint256 fee = _allPending(id) - before;
+        assertApproxEqAbs(fee, (ethOut + fee) * 600 / 10_000, 1);
+    }
+
+    function test_creator_onlyHookCanPayCreatorFees() public {
+        (, LeveredTreasury t) = _create();
+        vm.deal(trader, 1 ether);
+        vm.prank(trader);
+        vm.expectRevert(LeveredTreasury.OnlyHook.selector);
+        t.onCreatorFees{value: 1 ether}();
+    }
+
+    function test_creator_collectWithNothingPendingIsANoop() public {
+        (LeveredToken tok, LeveredTreasury t) = _create();
+        assertEq(hook.collectCreatorFees(_poolId(tok)), 0);
+        assertEq(t.creatorOwed(), 0);
+    }
+
     // ---------------------------------------------------------------- invariants under random trading
 
     /// Random buys, sells and pauses by two traders. After every step:
     /// - the fee the view quotes is exactly what the swap charges,
-    /// - every fee is between the creator's fee and 5%,
+    /// - every fee is between the coin's fee + 1% and 6%,
     /// - the hook's ETH claims equal the fees it owes treasuries.
     function testFuzz_feesStayBoundedAndAccounted(uint256 seed, uint16 baseFee) public {
         baseFee = uint16(bound(baseFee, 100, 500));
@@ -401,8 +491,8 @@ contract DynamicFeeTest is LeveredTestBase {
             vm.warp(block.timestamp + (r >> 8) % 3 hours);
 
             (uint16 quoted,) = hook.currentFee(id, action == 1, who);
-            assertGe(quoted, baseFee);
-            assertLe(quoted, 500);
+            assertGe(quoted, baseFee + 100, "at least the coin's fee plus the creator's 1%");
+            assertLe(quoted, 600, "never above 5% + the creator's 1%");
 
             uint256 before = _allPending(id);
             if (action == 1) {

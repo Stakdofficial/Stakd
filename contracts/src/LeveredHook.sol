@@ -18,11 +18,13 @@ import {ILeveredTreasury, ILeveredFactory} from "./interfaces/ILevered.sol";
 /// @notice Uniswap v4 hook shared by every Levered pool. Pools pair each coin with native ETH (always currency0),
 ///         and the hook charges the coin's trading fee in ETH on buys and sells, never in tokens.
 ///
-///         The fee a swap pays reacts to the market, always within the 5% cap:
+///         The coin's fee reacts to the market, always within its 5% cap:
 ///         - Volatility fee: the creator's fee is the base; recent price movement adds up to `MAX_VOL_SURCHARGE_BPS`
 ///           on top, fading as the market calms (movement halves every `VOL_HALF_LIFE`).
 ///         - Quick-flip fee: selling within `FLIP_WINDOW` of buying (same transaction sender) pays `MAX_FEE_BPS`, so
 ///           sandwich and round-trip bots pay the most.
+///         - Creator fee: every swap also pays `CREATOR_FEE_BPS` in ETH to the coin's creator, on top of the coin's
+///           fee, so a swap never pays more than `MAX_FEE_BPS + CREATOR_FEE_BPS` in total.
 ///         - Defend mode: once the coin's price falls `DEFEND_DROP_TICKS` below its high, the coin's share of fees goes to
 ///           buyback & burn instead of its portfolio for `DEFEND_DURATION`. Traders pay nothing extra for it.
 /// @dev The fee is taken from the ETH leg: before the swap when ETH is the specified amount, after the swap when it
@@ -32,7 +34,10 @@ contract LeveredHook is IHooks, IUnlockCallback {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
+    /// @notice The most the coin's own fee (base + volatility, or the quick-flip fee) can reach.
     uint16 public constant MAX_FEE_BPS = 500;
+    /// @notice Paid in ETH to the coin's creator on every swap, on top of the coin's fee.
+    uint16 public constant CREATOR_FEE_BPS = 100;
     Currency public constant ETH = CurrencyLibrary.ADDRESS_ZERO;
 
     /// @notice Recent movement halves over this period.
@@ -66,6 +71,8 @@ contract LeveredHook is IHooks, IUnlockCallback {
     /// @notice Fees charged while defend mode was on. The coin's share buys back and burns instead of funding its
     ///         portfolio; creator and platform shares are unchanged.
     mapping(PoolId => uint256) public pendingDefendFees;
+    /// @notice The creator's 1%, waiting to be paid to the coin's treasury (where only the creator can receive it).
+    mapping(PoolId => uint256) public pendingCreatorFees;
 
     /// @notice What the hook has seen of a pool's price. Ticks are the coin's price in ETH (the pool tick negated), so
     ///         a higher tick is a more expensive coin.
@@ -88,6 +95,8 @@ contract LeveredHook is IHooks, IUnlockCallback {
     event CrossChainFeesCollected(PoolId indexed id, address indexed treasury, uint256 amount);
     event DefendFeeAccrued(PoolId indexed id, uint256 amount);
     event DefendFeesCollected(PoolId indexed id, address indexed treasury, uint256 amount);
+    event CreatorFeeAccrued(PoolId indexed id, uint256 amount);
+    event CreatorFeesCollected(PoolId indexed id, address indexed treasury, uint256 amount);
     event DefendModeStarted(PoolId indexed id, uint40 until, int24 peakTick, int24 tick);
 
     error OnlyPoolManager();
@@ -156,11 +165,8 @@ contract LeveredHook is IHooks, IUnlockCallback {
         uint256 feeBps = _startSwap(id, sender, params.zeroForOne);
         if (_ethIsSpecified(params)) {
             uint256 amount = params.amountSpecified < 0 ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
-            uint256 fee = (amount * feeBps) / 10_000;
-            if (fee != 0) {
-                _accrue(id, fee, sender);
-                return (IHooks.beforeSwap.selector, toBeforeSwapDelta(int128(int256(fee)), 0), 0);
-            }
+            uint256 fee = _charge(id, amount, feeBps, sender);
+            if (fee != 0) return (IHooks.beforeSwap.selector, toBeforeSwapDelta(int128(int256(fee)), 0), 0);
         }
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
@@ -174,22 +180,20 @@ contract LeveredHook is IHooks, IUnlockCallback {
             PoolId id = key.toId();
             int128 ethDelta = delta.amount0();
             uint256 amount = ethDelta < 0 ? uint256(int256(-ethDelta)) : uint256(int256(ethDelta));
-            uint256 fee = (amount * _swapFeeBps()) / 10_000;
-            if (fee != 0) {
-                _accrue(id, fee, sender);
-                return (IHooks.afterSwap.selector, int128(int256(fee)));
-            }
+            uint256 fee = _charge(id, amount, _swapFeeBps(), sender);
+            if (fee != 0) return (IHooks.afterSwap.selector, int128(int256(fee)));
         }
         return (IHooks.afterSwap.selector, 0);
     }
 
     // ---------------------------------------------------------------- dynamic fee
 
-    /// @notice The fee (bps) a swap would pay right now, and whether defend mode would take the coin's share.
+    /// @notice The total fee (bps) a swap would pay right now, creator fee included, and whether defend mode would
+    ///         take the coin's share.
     /// @param trader The transaction sender (EOA) the quick-flip fee is tracked against.
     function currentFee(PoolId id, bool isSell, address trader) external view returns (uint16 feeBps, bool defending) {
         MarketState memory m = _observe(marketState[id], _coinTick(id), block.timestamp);
-        feeBps = _feeBps(id, m, isSell, trader);
+        feeBps = _feeBps(id, m, isSell, trader) + CREATOR_FEE_BPS;
         defending = block.timestamp < m.defendUntil;
     }
 
@@ -307,6 +311,17 @@ contract LeveredHook is IHooks, IUnlockCallback {
         emit DefendFeesCollected(id, treasury, amount);
     }
 
+    /// @notice Pay a pool's creator fees to its treasury, which owes them to the creator alone. Callable by anyone.
+    function collectCreatorFees(PoolId id) external returns (uint256 amount) {
+        amount = pendingCreatorFees[id];
+        if (amount == 0) return 0;
+        pendingCreatorFees[id] = 0;
+        poolManager.unlock(abi.encode(amount));
+        address treasury = pools[id].treasury;
+        ILeveredTreasury(treasury).onCreatorFees{value: amount}();
+        emit CreatorFeesCollected(id, treasury, amount);
+    }
+
     function unlockCallback(bytes calldata data) external onlyPoolManager returns (bytes memory) {
         uint256 amount = abi.decode(data, (uint256));
         poolManager.burn(address(this), ETH.toId(), amount);
@@ -314,9 +329,22 @@ contract LeveredHook is IHooks, IUnlockCallback {
         return "";
     }
 
+    /// @dev Takes the coin's fee (`coinFeeBps`) plus the creator fee on `amount` of ETH. Returns the total, which
+    ///      the hook claims from the PoolManager as ERC-6909 ETH: it offsets the delta the hook returns.
+    function _charge(PoolId id, uint256 amount, uint256 coinFeeBps, address sender) internal returns (uint256 total) {
+        total = (amount * (coinFeeBps + CREATOR_FEE_BPS)) / 10_000;
+        if (total == 0) return 0;
+        uint256 toCreator = (amount * CREATOR_FEE_BPS) / 10_000;
+        poolManager.mint(address(this), ETH.toId(), total);
+        if (toCreator != 0) {
+            pendingCreatorFees[id] += toCreator;
+            emit CreatorFeeAccrued(id, toCreator);
+        }
+        if (total > toCreator) _accrue(id, total - toCreator, sender);
+    }
+
+    /// @dev Books the coin's share of a fee into the right bucket.
     function _accrue(PoolId id, uint256 fee, address sender) internal {
-        // Mint an ETH claim to this hook; it offsets the delta the hook returns to the PoolManager.
-        poolManager.mint(address(this), ETH.toId(), fee);
         address xRouter = ILeveredFactory(factory).crosschainRouter();
         if (xRouter != address(0) && sender == xRouter) {
             pendingCrossChainFees[id] += fee;

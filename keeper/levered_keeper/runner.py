@@ -5,6 +5,7 @@ Per coin, every tick:
   fees      hook.collectFees                ETH trading fees → treasury (60% margin / 30% platform / 10% creator)
             hook.collectCrossChainFees      fees from bridged buys → treasury, where the 60% is burn fuel, not margin
             hook.collectDefendFees          fees charged in defend mode (price fell 20% from its high) → burn fuel too
+            hook.collectCreatorFees         the creator's 1% of every swap → treasury, owed to the creator alone
             treasury.claim*Fees             pay platform and creator shares once they add up
   burn      treasury.buybackAndBurn         spend whatever burn fuel is waiting; a bridged buy has no withdrawal
                                             behind it, so this is what turns its fee into a burn
@@ -45,7 +46,7 @@ class Keeper:
         self.state = State.load(cfg.state_path)
         self.alerts = Alerter(cfg.alert_webhook_url)
         self._no_crosschain_bucket = False  # set once the hook proves it is the pre-cross-chain one
-        self._no_defend_bucket = False  # set once the hook proves it predates defend mode
+        self._missing_buckets: set[str] = set()  # fee buckets the hook proved it predates (e.g. "Defend")
 
     def save(self) -> None:
         if not self.cfg.dry_run:
@@ -84,6 +85,7 @@ class Keeper:
         self.collect_fees(pool_id)
         self.collect_crosschain_fees(pool_id)
         self.collect_defend_fees(pool_id)
+        self.collect_creator_fees(pool_id)
         self.claim_fee_shares(treasury)
         self.burn_pending(cs, treasury)
         # Margin stays in the treasury until the coin has a Lighter sub-account to hand it to.
@@ -168,19 +170,27 @@ class Keeper:
     def collect_defend_fees(self, pool_id: bytes) -> None:
         """Sweep fees charged while the coin was in defend mode. Like cross-chain fees they are burn fuel, kept in
         their own bucket by the hook, so they need their own sweep."""
-        if self._no_defend_bucket:
+        self._sweep_bucket(pool_id, "Defend", self.cfg.min_burn_eth, "→ burn")
+
+    def collect_creator_fees(self, pool_id: bytes) -> None:
+        """Sweep the creator's 1% into the treasury, where `claim_fee_shares` pays it out to the creator."""
+        self._sweep_bucket(pool_id, "Creator", self.cfg.min_fee_eth, "→ creator")
+
+    def _sweep_bucket(self, pool_id: bytes, bucket: str, min_eth: float, note: str) -> None:
+        """Collect one of the hook's newer fee buckets (`pending<bucket>Fees` / `collect<bucket>Fees`)."""
+        if bucket in self._missing_buckets:
             return
         try:
-            pending = self.chain.hook.functions.pendingDefendFees(pool_id).call()
+            pending = getattr(self.chain.hook.functions, f"pending{bucket}Fees")(pool_id).call()
         except Exception:
-            # Hooks deployed before defend mode have no such bucket; the ABI is shared, so only the call can tell.
-            self._no_defend_bucket = True
-            log.info("hook has no defend-mode fee bucket; skipping defend sweeps")
+            # Older hooks have no such bucket; the ABI is shared, so only the call can tell. Stop asking once answered.
+            self._missing_buckets.add(bucket)
+            log.info("hook has no %s fee bucket; skipping those sweeps", bucket.lower())
             return
-        if to_eth(pending) >= self.cfg.min_burn_eth:
+        if to_eth(pending) >= min_eth:
             self.chain.send(
-                self.chain.hook.functions.collectDefendFees(pool_id),
-                f"collectDefendFees {to_eth(pending):.6f} ETH → burn",
+                getattr(self.chain.hook.functions, f"collect{bucket}Fees")(pool_id),
+                f"collect{bucket}Fees {to_eth(pending):.6f} ETH {note}",
             )
 
     def burn_pending(self, cs: CoinState, treasury) -> None:

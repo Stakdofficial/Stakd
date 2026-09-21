@@ -39,4 +39,5 @@ interface ILeveredTreasury {
     function onFees() external payable;
     function onCrossChainFees() external payable;
     function onDefendFees() external payable;
+    function onCreatorFees() external payable;
 }

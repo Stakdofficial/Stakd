@@ -35,6 +35,7 @@ contract LeveredTreasury is ReentrancyGuard {
     uint256 public totalFeesReceived; // ETH
     uint256 public totalCrossChainFees; // ETH, subset of totalFeesReceived that came via the cross-chain router
     uint256 public totalDefendFees; // ETH, subset of totalFeesReceived charged while the hook's defend mode was on
+    uint256 public totalCreatorFees; // ETH, the creator fee on every swap; separate from totalFeesReceived, all to creator
     uint256 public totalMarginDeposited; // ETH sent to Lighter (as USDG)
     uint256 public totalUsdgDeposited;
     uint256 public totalBuybackEth;
@@ -45,6 +46,7 @@ contract LeveredTreasury is ReentrancyGuard {
 
     event FeesReceived(uint256 total, uint256 toMargin, uint256 toCreator, uint256 toProtocol);
     event CrossChainFeesReceived(uint256 total, uint256 toBurn, uint256 toCreator, uint256 toProtocol);
+    event CreatorFeesReceived(uint256 amount);
     event DefendFeesReceived(uint256 total, uint256 toBurn, uint256 toCreator, uint256 toProtocol);
     event MarginDeposited(uint256 eth, uint256 usdg, address indexed lighterAccount);
     event BuybackAndBurn(uint256 ethSpent, uint256 tokensBurned);
@@ -149,6 +151,15 @@ contract LeveredTreasury is ReentrancyGuard {
         totalDefendFees += amount;
         // Like cross-chain fees, `toBurn` stays uncommitted, so `pendingBuyback()` spends it on buy & burn.
         emit DefendFeesReceived(amount, toBurn, toCreator, toProtocol);
+    }
+
+    /// @notice Called by the pool hook with the creator fee charged on every swap. All of it is owed to the creator;
+    ///         it never touches the portfolio, the platform share or burns.
+    function onCreatorFees() external payable {
+        if (msg.sender != factory.hook()) revert OnlyHook();
+        creatorOwed += msg.value;
+        totalCreatorFees += msg.value;
+        emit CreatorFeesReceived(msg.value);
     }
 
     /// @notice Pay the creator's accrued fee share. Anyone can trigger it; ETH only ever goes to the creator.

@@ -327,7 +327,15 @@ function TradePanel({
     [feeBps, false],
   ];
   const fee = side === "buy" ? buyFee[0] : sellFee[0];
-  const volatilityBps = Math.max(0, buyFee[0] - feeBps);
+  // Hooks with a creator fee quote it inside `currentFee`; older hooks have none.
+  const creatorFee = useReadContract({
+    address: hook,
+    abi: hookAbi,
+    functionName: "CREATOR_FEE_BPS",
+    query: { enabled: !!hook && !!liveFee.data, retry: false },
+  });
+  const creatorBps = liveFee.data ? (creatorFee.data ?? 0) : 0;
+  const volatilityBps = Math.max(0, buyFee[0] - creatorBps - feeBps);
   const quickFlip = side === "sell" && sellFee[0] > buyFee[0];
   const defending = buyFee[1];
 
@@ -438,8 +446,10 @@ function TradePanel({
         <span className="muted">Trading fee</span>
         <span>
           {fee / 100}% in ETH → {defending ? "buyback & burn" : "portfolio"}
+          {creatorBps > 0 ? ` + creator` : ""}
         </span>
       </div>
+      {creatorBps > 0 && <div className="muted small">Includes {creatorBps / 100}% to the coin&apos;s creator.</div>}
       {quickFlip ? (
         <div className="muted small">Selling within 15 seconds of your own buy costs {fee / 100}%. Wait a moment for the normal fee.</div>
       ) : (
