@@ -28,6 +28,7 @@ class Config:
     params: Params
     min_margin_eth: float  # don't deposit smaller amounts (Lighter needs >= $10 orders to be useful)
     min_fee_eth: float  # collect hook fees once a coin has this much pending
+    min_burn_eth: float  # buy back and burn once a coin has this much burn fuel waiting
     min_claim_eth: float  # pay out creator / platform shares once this much is owed
     max_slippage: float  # Lighter market orders
     swap_slippage: float  # Uniswap v4 swaps
@@ -40,6 +41,10 @@ class Config:
     min_gas_eth: float
 
     withdraw_mode: str = "secure"  # Lighter on Robinhood pays withdrawals out on Robinhood Chain itself
+    # Other Stakd factories whose keepers share this Lighter master account, and those keepers' state files.
+    # A sub-account used by any of their coins must never be adopted here.
+    sibling_factories: tuple[str, ...] = ()
+    sibling_state_paths: tuple[Path, ...] = ()
 
 
 def _get(name: str, default: str | None = None) -> str:
@@ -71,6 +76,8 @@ def load() -> Config:
         ),
         min_margin_eth=float(_get("MIN_MARGIN_ETH", "0.005")),
         min_fee_eth=float(_get("MIN_FEE_ETH", "0.0005")),
+        # Low on purpose: a burn is the visible half of a cross-chain buy, so it should not wait for a round number.
+        min_burn_eth=float(_get("MIN_BURN_ETH", "0.00001")),
         min_claim_eth=float(_get("MIN_CLAIM_ETH", "0.001")),
         max_slippage=float(_get("MAX_SLIPPAGE", "0.005")),
         swap_slippage=float(_get("SWAP_SLIPPAGE", "0.02")),
@@ -81,4 +88,6 @@ def load() -> Config:
         max_drawdown=float(_get("MAX_DRAWDOWN", "0.35")),
         alert_webhook_url=os.getenv("ALERT_WEBHOOK_URL", ""),
         min_gas_eth=float(_get("MIN_GAS_ETH", "0.001")),
+        sibling_factories=tuple(a.strip() for a in os.getenv("LEVERED_SIBLING_FACTORIES", "").split(",") if a.strip()),
+        sibling_state_paths=tuple(Path(p.strip()) for p in os.getenv("LEVERED_SIBLING_STATE_PATHS", "").split(",") if p.strip()),
     )

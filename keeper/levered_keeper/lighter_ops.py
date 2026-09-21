@@ -98,16 +98,38 @@ class LighterOps:
         if new_index is None:
             raise RuntimeError("sub-account did not appear")
 
+        private_key = await self._register_api_key(new_index)
+        log.info("created Lighter sub-account %s", new_index)
+        return new_index, API_KEY_INDEX, private_key
+
+    async def spare_sub_account(self, in_use: set[int]) -> int | None:
+        """An empty sub-account no coin uses, e.g. one left behind by an interrupted setup.
+        Lighter caps sub-accounts per master account, so these are reused before creating new ones."""
+        subs = (await self.accounts.accounts_by_l1_address(l1_address=self.l1_address)).sub_accounts
+        for a in sorted(subs, key=lambda a: a.index):
+            if a.index == self.cfg.lighter_master_account_index or a.index in in_use:
+                continue
+            snap = await self.snapshot(a.index)
+            if snap.equity == 0 and not snap.positions:
+                return a.index
+        return None
+
+    async def adopt_sub_account(self, index: int) -> tuple[int, int, str]:
+        """Registers a fresh API key on an existing spare sub-account. Returns (index, key index, private key)."""
+        private_key = await self._register_api_key(index)
+        log.info("adopted spare Lighter sub-account %s", index)
+        return index, API_KEY_INDEX, private_key
+
+    async def _register_api_key(self, account_index: int) -> str:
         private_key, public_key, err = lighter.create_api_key()
         if err:
             raise RuntimeError(f"create_api_key: {err}")
-        signer = self._signer(new_index, API_KEY_INDEX, private_key)
+        signer = self._signer(account_index, API_KEY_INDEX, private_key)
         _, err = await signer.change_api_key(eth_private_key=self.cfg.lighter_eth_private_key, new_pubkey=public_key, api_key_index=API_KEY_INDEX)
         if err:
             raise RuntimeError(f"change_api_key: {err}")
-        self._signers[new_index] = signer
-        log.info("created Lighter sub-account %s", new_index)
-        return new_index, API_KEY_INDEX, private_key
+        self._signers[account_index] = signer
+        return private_key
 
     # ------------------------------------------------------------------ money movement
 

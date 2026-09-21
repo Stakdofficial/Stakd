@@ -441,6 +441,19 @@
   },
   {
     "type": "function",
+    "name": "crosschainRouter",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "executeMarginConfig",
     "inputs": [],
     "outputs": [],
@@ -834,6 +847,19 @@
   },
   {
     "type": "function",
+    "name": "setCrosschainRouter",
+    "inputs": [
+      {
+        "name": "router_",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setFeeShares",
     "inputs": [
       {
@@ -1079,6 +1105,19 @@
             "internalType": "uint16"
           }
         ]
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "CrosschainRouterSet",
+    "inputs": [
+      {
+        "name": "router",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
       }
     ],
     "anonymous": false

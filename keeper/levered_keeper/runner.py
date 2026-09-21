@@ -3,7 +3,12 @@
 Per coin, every tick:
 
   fees      hook.collectFees                ETH trading fees → treasury (60% margin / 30% platform / 10% creator)
+            hook.collectCrossChainFees      fees from bridged buys → treasury, where the 60% is burn fuel, not margin
+            hook.collectDefendFees          fees charged in defend mode (price fell 20% from its high) → burn fuel too
+            hook.collectCreatorFees         the creator's 1% of every swap → treasury, owed to the creator alone
             treasury.claim*Fees             pay platform and creator shares once they add up
+  burn      treasury.buybackAndBurn         spend whatever burn fuel is waiting; a bridged buy has no withdrawal
+                                            behind it, so this is what turns its fee into a burn
   margin    treasury.depositMargin          ETH → USDG on Uniswap v4 → Lighter deposit (credits the operator account)
             deposit: minted → crediting (moved into the coin's sub-account) → credited (equity visible)
   trade     rebalance the sub-account toward equity × weight × leverage per leg
@@ -40,6 +45,8 @@ class Keeper:
         self.lighter = LighterOps(cfg)
         self.state = State.load(cfg.state_path)
         self.alerts = Alerter(cfg.alert_webhook_url)
+        self._no_crosschain_bucket = False  # set once the hook proves it is the pre-cross-chain one
+        self._missing_buckets: set[str] = set()  # fee buckets the hook proved it predates (e.g. "Defend")
 
     def save(self) -> None:
         if not self.cfg.dry_run:
@@ -76,8 +83,13 @@ class Keeper:
         treasury = self.chain.treasury(cs.treasury)
         await self.ensure_sub_account(cs, treasury)
         self.collect_fees(pool_id)
+        self.collect_crosschain_fees(pool_id)
+        self.collect_defend_fees(pool_id)
+        self.collect_creator_fees(pool_id)
         self.claim_fee_shares(treasury)
-        if not cs.halted:
+        self.burn_pending(cs, treasury)
+        # Margin stays in the treasury until the coin has a Lighter sub-account to hand it to.
+        if not cs.halted and cs.sub_account_index is not None:
             self.deposit_margin(cs, treasury)
         await self.advance_deposits(cs)
         if not cs.halted:
@@ -93,13 +105,46 @@ class Keeper:
 
     async def ensure_sub_account(self, cs: CoinState, treasury) -> None:
         if cs.sub_account_index is None:
-            if self.cfg.dry_run:
-                log.info("[dry-run] would create Lighter sub-account for %s", cs.token)
+            # Lighter caps sub-accounts per master account and a treasury's account can never change,
+            # so a coin only gets one once it has earned enough fees for its first margin deposit.
+            amount, _ = self.margin_available(treasury)
+            if to_eth(amount) < self.cfg.min_margin_eth:
                 return
-            cs.sub_account_index, cs.api_key_index, cs.api_private_key = await self.lighter.create_sub_account()
+            if self.cfg.dry_run:
+                log.info("[dry-run] would set up a Lighter sub-account for %s", cs.token)
+                return
+            spare = await self.lighter.spare_sub_account(self.sub_accounts_in_use())
+            try:
+                if spare is not None:
+                    cs.sub_account_index, cs.api_key_index, cs.api_private_key = await self.lighter.adopt_sub_account(spare)
+                else:
+                    cs.sub_account_index, cs.api_key_index, cs.api_private_key = await self.lighter.create_sub_account()
+            except RuntimeError as e:
+                if "too many sub accounts" not in str(e):
+                    raise
+                self.alerts.send("lighter:slots", f"no Lighter sub-account left for {cs.token}; its margin waits in the treasury")
+                return
             self.save()
         if not treasury.functions.lighterAccountSet().call():
             self.chain.send(treasury.functions.setLighterAccount(cs.sub_account_index), f"setLighterAccount {cs.sub_account_index}")
+
+    def sub_accounts_in_use(self) -> set[int]:
+        """Sub-accounts claimed by any coin, in keeper state or bound on-chain — this factory's coins and those of
+        sibling factories whose keepers share the same Lighter master account. Adopting one of theirs would put two
+        coins' money in one account and rotate the other keeper's API key out from under it."""
+        used = {cs.sub_account_index for cs in self.state.coins.values() if cs.sub_account_index is not None}
+        for path in self.cfg.sibling_state_paths:
+            # Covers a sibling that has claimed an account but not yet bound it on-chain.
+            if path.exists():
+                used |= {cs.sub_account_index for cs in State.load(path).coins.values() if cs.sub_account_index is not None}
+        treasuries = [coin["treasury"] for coin in self.chain.coins()]
+        for factory in self.cfg.sibling_factories:
+            treasuries += self.chain.treasuries_of(factory)
+        for address in treasuries:
+            treasury = self.chain.treasury(address)
+            if treasury.functions.lighterAccountSet().call():
+                used.add(treasury.functions.lighterAccountIndex().call())
+        return used
 
     def signer(self, cs: CoinState):
         return self.lighter.signer_for(cs.sub_account_index, cs.api_key_index, cs.api_private_key)
@@ -112,18 +157,77 @@ class Keeper:
         if to_eth(pending) >= self.cfg.min_fee_eth:
             self.chain.send(self.chain.hook.functions.collectFees(pool_id), f"collectFees {to_eth(pending):.5f} ETH")
 
+    def collect_crosschain_fees(self, pool_id: bytes) -> None:
+        """Sweep fees from buys that arrived over a bridge. The hook keeps them in a separate bucket because they
+        fund buyback-and-burn instead of the portfolio, so they need their own sweep: collectFees never sees them."""
+        if self._no_crosschain_bucket:
+            return
+        try:
+            pending = self.chain.hook.functions.pendingCrossChainFees(pool_id).call()
+        except Exception:
+            # The hook of the original factory predates the cross-chain bucket. The ABI is shared between both
+            # keepers, so only the call itself can tell them apart; stop asking once it has answered.
+            self._no_crosschain_bucket = True
+            log.info("hook has no cross-chain fee bucket; skipping cross-chain sweeps")
+            return
+        if to_eth(pending) >= self.cfg.min_burn_eth:
+            self.chain.send(
+                self.chain.hook.functions.collectCrossChainFees(pool_id),
+                f"collectCrossChainFees {to_eth(pending):.6f} ETH → burn",
+            )
+
+    def collect_defend_fees(self, pool_id: bytes) -> None:
+        """Sweep fees charged while the coin was in defend mode. Like cross-chain fees they are burn fuel, kept in
+        their own bucket by the hook, so they need their own sweep."""
+        self._sweep_bucket(pool_id, "Defend", self.cfg.min_burn_eth, "→ burn")
+
+    def collect_creator_fees(self, pool_id: bytes) -> None:
+        """Sweep the creator's 1% into the treasury, where `claim_fee_shares` pays it out to the creator."""
+        self._sweep_bucket(pool_id, "Creator", self.cfg.min_fee_eth, "→ creator")
+
+    def _sweep_bucket(self, pool_id: bytes, bucket: str, min_eth: float, note: str) -> None:
+        """Collect one of the hook's newer fee buckets (`pending<bucket>Fees` / `collect<bucket>Fees`)."""
+        if bucket in self._missing_buckets:
+            return
+        try:
+            pending = getattr(self.chain.hook.functions, f"pending{bucket}Fees")(pool_id).call()
+        except Exception:
+            # Older hooks have no such bucket; the ABI is shared, so only the call can tell. Stop asking once answered.
+            self._missing_buckets.add(bucket)
+            log.info("hook has no %s fee bucket; skipping those sweeps", bucket.lower())
+            return
+        if to_eth(pending) >= min_eth:
+            self.chain.send(
+                getattr(self.chain.hook.functions, f"collect{bucket}Fees")(pool_id),
+                f"collect{bucket}Fees {to_eth(pending):.6f} ETH {note}",
+            )
+
+    def burn_pending(self, cs: CoinState, treasury) -> None:
+        """Burn whatever burn fuel is waiting. Profit withdrawals run their own burn when they land, but a
+        cross-chain fee has no withdrawal behind it, so this step is what makes those burns happen at all."""
+        amount = treasury.functions.pendingBuyback().call()
+        if to_eth(amount) < self.cfg.min_burn_eth:
+            return
+        min_tokens = int(self.chain.quote_buy(cs.token, amount) * (1 - 2 * self.cfg.swap_slippage))
+        # Nothing is being converted from USDG on this path, so there is no ETH-out floor to set for that leg.
+        self.chain.send(treasury.functions.buybackAndBurn(0, min_tokens), f"buybackAndBurn ~{to_eth(amount):.6f} ETH")
+
     def claim_fee_shares(self, treasury) -> None:
         if to_eth(treasury.functions.protocolOwed().call()) >= self.cfg.min_claim_eth:
             self.chain.send(treasury.functions.claimProtocolFees(), "claimProtocolFees")
         if to_eth(treasury.functions.creatorOwed().call()) >= self.cfg.min_claim_eth:
             self.chain.send(treasury.functions.claimCreatorFees(), "claimCreatorFees")
 
-    def deposit_margin(self, cs: CoinState, treasury) -> None:
+    def margin_available(self, treasury) -> tuple[int, int]:
+        """(ETH depositable now under the lifetime cap, ETH in the margin reserve); nothing while launches are paused."""
         if self.chain.factory.functions.paused().call():
-            return
+            return 0, 0
         reserve = treasury.functions.marginReserve().call()
         room = self.chain.factory.functions.marginCapPerCoin().call() - treasury.functions.totalMarginDeposited().call()
-        amount = min(reserve, max(room, 0))
+        return min(reserve, max(room, 0)), reserve
+
+    def deposit_margin(self, cs: CoinState, treasury) -> None:
+        amount, reserve = self.margin_available(treasury)
         if to_eth(amount) < self.cfg.min_margin_eth:
             if reserve > amount and to_eth(reserve) >= self.cfg.min_margin_eth:
                 self.alerts.send(f"cap:{cs.token}", f"coin {cs.token} hit its margin cap; {to_eth(reserve):.4f} ETH waiting")

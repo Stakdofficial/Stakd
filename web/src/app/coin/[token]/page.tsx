@@ -6,10 +6,13 @@ import { useAccount, useBalance, usePublicClient, useReadContract, useReadContra
 import { avgLeverage, Basket, legLabel } from "@/components/Basket";
 import { ImagePicker } from "@/components/ImagePicker";
 import { PriceCurve } from "@/components/PriceCurve";
+import { LiveChart } from "@/components/LiveChart";
+import { BuyFromSolana } from "@/components/BuyFromSolana";
+import { CoinActivity } from "@/components/CoinActivity";
 import { useQuery } from "@tanstack/react-query";
 import { factoryAbi, hookAbi, routerAbi, tokenAbi, treasuryAbi } from "@/lib/abis";
-import { chain, erc20Abi, ETH_DECIMALS, explorerAddress, FACTORY, isHiddenCoin, METADATA, metadataAbi, POOL_MANAGER, poolManagerAbi, quoterAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
-import { useEthPrice, useLighterAccount, useMarkets, type Leg } from "@/lib/hooks";
+import { chain, erc20Abi, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, orderFactoryFor, POOL_MANAGER, poolManagerAbi, quoterAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
+import { useCoinFactory, useEthPrice, useLighterAccount, useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 import { decodePoolState, ethPerToken, POOL_STATE_SLOTS, poolStateSlot, sqrtPriceFromSlots } from "@/lib/pool";
 
@@ -25,7 +28,16 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
   const markets = useMarkets();
   const ethPrice = useEthPrice();
 
-  const id = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "coinIdOf", args: [token] });
+  // A coin keeps the factory it launched from: its hook, router and pool all belong to that one.
+  const { factory: coinFactory } = useCoinFactory(token);
+  const FACTORY = coinFactory ?? ("0x0000000000000000000000000000000000000000" as Address);
+  const id = useReadContract({
+    address: FACTORY,
+    abi: factoryAbi,
+    functionName: "coinIdOf",
+    args: [token],
+    query: { enabled: !!coinFactory },
+  });
   const coin = useReadContract({
     address: FACTORY,
     abi: factoryAbi,
@@ -35,9 +47,10 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
   });
   const treasury = coin.data?.treasury;
 
-  const hookAddress = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "hook" });
-  const poolKey = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "poolKeyOf", args: [token] });
-  const meta = useReadContract({ address: METADATA, abi: metadataAbi, functionName: "metadata", args: [token] });
+  const hookAddress = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "hook", query: { enabled: !!coinFactory } });
+  const poolKey = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "poolKeyOf", args: [token], query: { enabled: !!coinFactory } });
+  const METADATA = metadataFor(coinFactory);
+  const meta = useReadContract({ address: METADATA, abi: metadataAbi, functionName: "metadata", args: [token], query: { enabled: !!coinFactory } });
   const poolId = coin.data?.poolId;
 
   const info = useReadContracts({
@@ -132,6 +145,7 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
               {formatUsd(price, price < 0.01 ? 8 : 4)}
             </div>
             <div className="muted small">market cap {formatUsd(price * Number(formatUnits(supply, TOKEN_DECIMALS)), 0)}</div>
+            <ShareButtons token={token} name={name} symbol={symbol} />
           </div>
         </div>
 
@@ -146,7 +160,9 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
 
         {profile?.description && <div className="card stack small coin-description">{profile.description}</div>}
 
-        {isCreator && <ProfileEditor token={token} current={profile} onSaved={() => meta.refetch()} />}
+        {isCreator && <ProfileEditor token={token} metadata={METADATA} current={profile} onSaved={() => meta.refetch()} />}
+
+        {poolId && <LiveChart poolId={poolId} />}
 
         {usdPerEth > 0 && <PriceCurve poolTokens={poolTokens} poolUsdc={poolEth * usdPerEth} launchSupply={1_000_000_000} />}
 
@@ -195,6 +211,10 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
           )}
         </div>
 
+        {poolId && treasury && (
+          <CoinActivity token={token} poolId={poolId} symbol={symbol} usdPerEth={usdPerEth} creator={coin.data.creator} treasury={treasury} />
+        )}
+
         <div className="stats" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
           <Stat k="Fees earned" v={ethStr(fees) + usd(fees)} />
           <Stat k="Margin sent to Lighter" v={ethStr(bridged) + usd(bridged)} />
@@ -206,8 +226,24 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
       </div>
 
       <aside style={{ position: "sticky", top: 88 }}>
-        <TradePanel token={token} symbol={symbol} feeBps={feeBps} poolKey={poolKey.data} />
+        <TradePanel token={token} symbol={symbol} feeBps={feeBps} poolKey={poolKey.data} hook={hookAddress.data} poolId={poolId} />
       </aside>
+    </div>
+  );
+}
+
+function ShareButtons({ token, name, symbol }: { token: Address; name: string; symbol: string }) {
+  const url = `https://www.stakd.tech/coin/${token}`;
+  const text = `${name} ($${symbol}) is a coin with its own leveraged portfolio on @StakdOfficial`;
+  const intent = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+  return (
+    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+      <a href={intent} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm">
+        Share on X
+      </a>
+      <a href={`/coin/${token}/opengraph-image`} download={`${symbol}-stakd.png`} className="btn btn-outline btn-sm">
+        Share card
+      </a>
     </div>
   );
 }
@@ -223,7 +259,23 @@ function Stat({ k, v }: { k: string; v: string }) {
 
 type PoolKeyTuple = { currency0: Address; currency1: Address; fee: number; tickSpacing: number; hooks: Address };
 
-function TradePanel({ token, symbol, feeBps, poolKey }: { token: Address; symbol: string; feeBps: number; poolKey: PoolKeyTuple | undefined }) {
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
+
+function TradePanel({
+  token,
+  symbol,
+  feeBps,
+  poolKey,
+  hook,
+  poolId,
+}: {
+  token: Address;
+  symbol: string;
+  feeBps: number;
+  poolKey: PoolKeyTuple | undefined;
+  hook: Address | undefined;
+  poolId: `0x${string}` | undefined;
+}) {
   const { address, isConnected, chainId } = useAccount();
   const client = usePublicClient();
   const { writeContractAsync } = useWriteContract();
@@ -232,7 +284,16 @@ function TradePanel({ token, symbol, feeBps, poolKey }: { token: Address; symbol
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const router = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "router" });
+  // Trade through the router belonging to this coin's own factory, not whichever factory is current.
+  const { factory: coinFactory } = useCoinFactory(token);
+  // Solana buys go through the order factory of the coin's own factory; factories without one have no Solana route.
+  const orderFactory = orderFactoryFor(coinFactory);
+  const router = useReadContract({
+    address: coinFactory ?? ("0x0000000000000000000000000000000000000000" as Address),
+    abi: factoryAbi,
+    functionName: "router",
+    query: { enabled: !!coinFactory },
+  });
   const decIn = side === "buy" ? ETH_DECIMALS : TOKEN_DECIMALS;
   const decOut = side === "buy" ? TOKEN_DECIMALS : ETH_DECIMALS;
 
@@ -251,6 +312,34 @@ function TradePanel({ token, symbol, feeBps, poolKey }: { token: Address; symbol
   });
   const balIn = side === "buy" ? ethBalance.data?.value : tokenBalance.data;
 
+  // The fee right now: the creator's fee plus the volatility fee, 5% on a sell right after your own buy, and whether
+  // defend mode is sending the coin's share to buyback & burn. Hooks from before these features revert on
+  // `currentFee`, so a failed read falls back to the fixed fee.
+  const liveFee = useReadContracts({
+    allowFailure: false,
+    contracts: [
+      { address: hook!, abi: hookAbi, functionName: "currentFee", args: [poolId!, false, address ?? ZERO_ADDRESS] },
+      { address: hook!, abi: hookAbi, functionName: "currentFee", args: [poolId!, true, address ?? ZERO_ADDRESS] },
+    ],
+    query: { enabled: !!hook && !!poolId, refetchInterval: 10_000, retry: false },
+  });
+  const [buyFee, sellFee] = (liveFee.data as readonly (readonly [number, boolean])[] | undefined) ?? [
+    [feeBps, false],
+    [feeBps, false],
+  ];
+  const fee = side === "buy" ? buyFee[0] : sellFee[0];
+  // Hooks with a creator fee quote it inside `currentFee`; older hooks have none.
+  const creatorFee = useReadContract({
+    address: hook,
+    abi: hookAbi,
+    functionName: "CREATOR_FEE_BPS",
+    query: { enabled: !!hook && !!liveFee.data, retry: false },
+  });
+  const creatorBps = liveFee.data ? (creatorFee.data ?? 0) : 0;
+  const volatilityBps = Math.max(0, buyFee[0] - creatorBps - feeBps);
+  const quickFlip = side === "sell" && sellFee[0] > buyFee[0];
+  const defending = buyFee[1];
+
   // Quote through the v4 Quoter, which simulates the pool *and* the hook, so the ETH fee is included.
   // The old reserve model broke at launch: all liquidity sits above the current tick, so it read zero
   // and disabled buying on every freshly launched coin.
@@ -261,11 +350,13 @@ function TradePanel({ token, symbol, feeBps, poolKey }: { token: Address; symbol
   }, [amountIn]);
 
   const quoteQuery = useQuery({
-    queryKey: ["quote", token, side, debouncedIn.toString()],
+    queryKey: ["quote", token, side, debouncedIn.toString(), address],
     queryFn: async () => {
       if (!client || !poolKey) return 0n;
       try {
         const { result } = await client.simulateContract({
+          // The hook prices a sell right after your own buy higher, so quote as the wallet that will trade.
+          account: address,
           address: V4_QUOTER,
           abi: quoterAbi,
           functionName: "quoteExactInputSingle",
@@ -354,8 +445,26 @@ function TradePanel({ token, symbol, feeBps, poolKey }: { token: Address; symbol
       </div>
       <div className="spread small">
         <span className="muted">Trading fee</span>
-        <span>{feeBps / 100}% in ETH → portfolio</span>
+        <span>
+          {fee / 100}% in ETH → {defending ? "buyback & burn" : "portfolio"}
+          {creatorBps > 0 ? ` + creator` : ""}
+        </span>
       </div>
+      {creatorBps > 0 && <div className="muted small">Includes {creatorBps / 100}% to the coin&apos;s creator.</div>}
+      {quickFlip ? (
+        <div className="muted small">Selling within 15 seconds of your own buy costs {fee / 100}%. Wait a moment for the normal fee.</div>
+      ) : (
+        volatilityBps > 0 && (
+          <div className="muted small">
+            Includes a {volatilityBps / 100}% volatility fee while the price is moving fast. It fades as trading calms down.
+          </div>
+        )
+      )}
+      {defending && (
+        <div className="alert small">
+          Defend mode is on: the price fell 20% from its high, so the coin&apos;s share of every fee buys back and burns {symbol}.
+        </div>
+      )}
       {msg && <div className={`alert small ${msg.ok ? "" : "alert-error"}`}>{msg.text}</div>}
       <button
         className="btn btn-primary btn-block"
@@ -383,6 +492,7 @@ function TradePanel({ token, symbol, feeBps, poolKey }: { token: Address; symbol
                     ? `Buy ${symbol}`
                     : `Sell ${symbol}`)}
       </button>
+      {side === "buy" && orderFactory && <BuyFromSolana token={token} symbol={symbol} orderFactory={orderFactory} />}
     </div>
   );
 }
@@ -392,7 +502,17 @@ type Profile = { image: string; description: string; telegram: string; x: string
 const EMPTY_PROFILE: Profile = { image: "", description: "", telegram: "", x: "", website: "" };
 
 /** Creator-only profile editor. Every field is optional; blank fields simply clear. */
-function ProfileEditor({ token, current, onSaved }: { token: Address; current: Profile | undefined; onSaved: () => void }) {
+function ProfileEditor({
+  token,
+  metadata,
+  current,
+  onSaved,
+}: {
+  token: Address;
+  metadata: Address;
+  current: Profile | undefined;
+  onSaved: () => void;
+}) {
   const { writeContractAsync } = useWriteContract();
   const client = usePublicClient();
   const [open, setOpen] = useState(false);
@@ -415,7 +535,7 @@ function ProfileEditor({ token, current, onSaved }: { token: Address; current: P
     setBusy(true);
     try {
       const hash = await writeContractAsync({
-        address: METADATA,
+        address: metadata,
         abi: metadataAbi,
         functionName: "setMetadata",
         args: [token, form],

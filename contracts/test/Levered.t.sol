@@ -112,7 +112,7 @@ contract ExactOutSwapper is IUnlockCallback {
     }
 }
 
-contract LeveredTest is Test {
+abstract contract LeveredTestBase is Test {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
@@ -134,7 +134,7 @@ contract LeveredTest is Test {
     address creator = makeAddr("creator");
     address trader = makeAddr("trader");
 
-    function setUp() public {
+    function setUp() public virtual {
         pm = new PoolManager(address(this));
         usdg = new MockUSDG();
         lighter = new MockLighter();
@@ -290,11 +290,17 @@ contract LeveredTest is Test {
         (LeveredToken tok,) = _create();
         uint256 got = _buy(trader, tok, 1 ether);
         uint256 afterBuy = hook.pendingFees(_poolId(tok));
+        uint256 creatorAfterBuy = hook.pendingCreatorFees(_poolId(tok));
+        vm.warp(block.timestamp + 1 days); // past the quick-flip window, with the buy's price move faded out
 
         uint256 ethOut = _sell(trader, tok, got);
         uint256 sellFee = hook.pendingFees(_poolId(tok)) - afterBuy;
-        assertApproxEqAbs(sellFee, (ethOut + sellFee) * FEE_BPS / 10_000, 1);
-        assertApproxEqRel(ethOut, 1 ether * 98 / 100 * 98 / 100, 0.001e18);
+        uint256 creatorFee = hook.pendingCreatorFees(_poolId(tok)) - creatorAfterBuy;
+        uint256 gross = ethOut + sellFee + creatorFee;
+        assertApproxEqAbs(sellFee, gross * FEE_BPS / 10_000, 1);
+        assertApproxEqAbs(creatorFee, gross / 100, 1);
+        // 2% coin fee + 1% creator fee, each way
+        assertApproxEqRel(ethOut, 1 ether * 97 / 100 * 97 / 100, 0.001e18);
     }
 
     function test_exactOutputSwapsAlsoPayFeeInEth() public {
@@ -308,9 +314,13 @@ contract LeveredTest is Test {
         uint256 paid = uint256(int256(-d.amount0()));
         assertEq(tok.balanceOf(trader), 1_000_000e18);
         uint256 buyFee = hook.pendingFees(key.toId());
-        assertApproxEqAbs(buyFee, (paid - buyFee) * FEE_BPS / 10_000, 1);
+        uint256 creatorFee = hook.pendingCreatorFees(key.toId());
+        uint256 net = paid - buyFee - creatorFee; // the ETH that actually went into the pool
+        assertApproxEqAbs(buyFee, net * FEE_BPS / 10_000, 1);
+        assertApproxEqAbs(creatorFee, net / 100, 1);
 
         // Exact-out sell: receive exactly 0.001 ETH; fee is 2% of that (beforeSwap path).
+        vm.warp(block.timestamp + 1 days); // past the quick-flip window, with the buy's price move faded out
         vm.startPrank(trader);
         tok.approve(address(exactOut), type(uint256).max);
         uint256 ethBefore = trader.balance;
@@ -553,3 +563,6 @@ contract LeveredTest is Test {
         assertLt(back, ethIn);
     }
 }
+
+/// @dev Concrete runner for the base suite; `CrossChain.t.sol` reuses the same setup.
+contract LeveredTest is LeveredTestBase {}

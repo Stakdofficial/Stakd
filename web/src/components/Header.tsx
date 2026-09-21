@@ -24,6 +24,7 @@ export function Header() {
         </Link>
         <nav className="nav">
           <Link href="/#coins">Coins</Link>
+          <Link href="/burns">Burns</Link>
           <Link href="/docs">Docs</Link>
           <XLink size={17} />
           <ThemeToggle />

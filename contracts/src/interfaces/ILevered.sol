@@ -26,6 +26,7 @@ struct MarginConfig {
 interface ILeveredFactory {
     function router() external view returns (address);
     function hook() external view returns (address);
+    function crosschainRouter() external view returns (address);
     function isKeeper(address account) external view returns (bool);
     function protocolFeeRecipient() external view returns (address);
     function marginConfig() external view returns (MarginConfig memory);
@@ -36,4 +37,7 @@ interface ILeveredFactory {
 
 interface ILeveredTreasury {
     function onFees() external payable;
+    function onCrossChainFees() external payable;
+    function onDefendFees() external payable;
+    function onCreatorFees() external payable;
 }

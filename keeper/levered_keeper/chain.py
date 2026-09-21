@@ -89,6 +89,11 @@ class Robinhood:
             out.append({"id": i, "token": token, "treasury": treasury, "pool_id": pool_id, "creator": creator})
         return out
 
+    def treasuries_of(self, factory: str) -> list[str]:
+        """Treasuries of another Stakd factory (one that shares this keeper's Lighter master account)."""
+        f = self.contract(factory, _abi("LeveredFactory"))
+        return [f.functions.coin(i).call()[1] for i in range(f.functions.coinCount().call())]
+
     def token(self, address: str) -> Contract:
         return self.contract(address, _abi("LeveredToken"))
 

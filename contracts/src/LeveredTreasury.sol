@@ -33,6 +33,9 @@ contract LeveredTreasury is ReentrancyGuard {
     uint256 public creatorOwed; // ETH
     uint256 public protocolOwed; // ETH
     uint256 public totalFeesReceived; // ETH
+    uint256 public totalCrossChainFees; // ETH, subset of totalFeesReceived that came via the cross-chain router
+    uint256 public totalDefendFees; // ETH, subset of totalFeesReceived charged while the hook's defend mode was on
+    uint256 public totalCreatorFees; // ETH, the creator fee on every swap; separate from totalFeesReceived, all to creator
     uint256 public totalMarginDeposited; // ETH sent to Lighter (as USDG)
     uint256 public totalUsdgDeposited;
     uint256 public totalBuybackEth;
@@ -42,6 +45,9 @@ contract LeveredTreasury is ReentrancyGuard {
     bool public lighterAccountSet;
 
     event FeesReceived(uint256 total, uint256 toMargin, uint256 toCreator, uint256 toProtocol);
+    event CrossChainFeesReceived(uint256 total, uint256 toBurn, uint256 toCreator, uint256 toProtocol);
+    event CreatorFeesReceived(uint256 amount);
+    event DefendFeesReceived(uint256 total, uint256 toBurn, uint256 toCreator, uint256 toProtocol);
     event MarginDeposited(uint256 eth, uint256 usdg, address indexed lighterAccount);
     event BuybackAndBurn(uint256 ethSpent, uint256 tokensBurned);
     event FeesClaimed(address indexed to, uint256 amount);
@@ -108,6 +114,52 @@ contract LeveredTreasury is ReentrancyGuard {
         protocolOwed += toProtocol;
         totalFeesReceived += amount;
         emit FeesReceived(amount, toMargin, toCreator, toProtocol);
+    }
+
+    /// @notice Called by the pool hook with fees from buys that came through the cross-chain router.
+    ///         The trader paid the same fee as anyone else; the only difference is where the coin's share goes:
+    ///         straight to buyback & burn instead of the leveraged portfolio. Creator and platform shares are
+    ///         unchanged, so nobody's revenue pays for the burn.
+    function onCrossChainFees() external payable {
+        if (msg.sender != factory.hook()) revert OnlyHook();
+        uint256 amount = msg.value;
+        uint256 toCreator = (amount * creatorShareBps) / 10_000;
+        uint256 toProtocol = (amount * protocolShareBps) / 10_000;
+        uint256 toBurn = amount - toCreator - toProtocol;
+
+        creatorOwed += toCreator;
+        protocolOwed += toProtocol;
+        totalFeesReceived += amount;
+        totalCrossChainFees += amount;
+        // `toBurn` stays as uncommitted balance, which is exactly what `pendingBuyback()` spends on buy & burn.
+        emit CrossChainFeesReceived(amount, toBurn, toCreator, toProtocol);
+    }
+
+    /// @notice Called by the pool hook with fees charged while the coin was in defend mode (its price had fallen well
+    ///         below its high). Like cross-chain fees, the coin's share goes straight to buyback & burn while the
+    ///         creator and platform shares are unchanged.
+    function onDefendFees() external payable {
+        if (msg.sender != factory.hook()) revert OnlyHook();
+        uint256 amount = msg.value;
+        uint256 toCreator = (amount * creatorShareBps) / 10_000;
+        uint256 toProtocol = (amount * protocolShareBps) / 10_000;
+        uint256 toBurn = amount - toCreator - toProtocol;
+
+        creatorOwed += toCreator;
+        protocolOwed += toProtocol;
+        totalFeesReceived += amount;
+        totalDefendFees += amount;
+        // Like cross-chain fees, `toBurn` stays uncommitted, so `pendingBuyback()` spends it on buy & burn.
+        emit DefendFeesReceived(amount, toBurn, toCreator, toProtocol);
+    }
+
+    /// @notice Called by the pool hook with the creator fee charged on every swap. All of it is owed to the creator;
+    ///         it never touches the portfolio, the platform share or burns.
+    function onCreatorFees() external payable {
+        if (msg.sender != factory.hook()) revert OnlyHook();
+        creatorOwed += msg.value;
+        totalCreatorFees += msg.value;
+        emit CreatorFeesReceived(msg.value);
     }
 
     /// @notice Pay the creator's accrued fee share. Anyone can trigger it; ETH only ever goes to the creator.

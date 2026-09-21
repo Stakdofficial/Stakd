@@ -63,7 +63,7 @@ export default function Whitepaper() {
           <h1>Stakd: coins backed by their own leveraged portfolio</h1>
           <p>
             Stakd is a token launchpad on <b>{chain.name}</b> in which every coin owns a leveraged trading portfolio. Each coin
-            trades against native ETH in a Uniswap v4 pool. A Uniswap v4 hook charges a fixed trading fee in ETH on every buy and
+            trades against native ETH in a Uniswap v4 pool. A Uniswap v4 hook charges a trading fee in ETH on every buy and
             sell. 60% of that fee becomes margin for the coin&apos;s own basket of perpetual futures on Lighter&apos;s Robinhood
             exchange, and 40% goes to the platform. When the basket makes a profit, 75% of the realized profit is used to buy the
             coin back from its pool and burn it.
@@ -179,8 +179,10 @@ export default function Whitepaper() {
         <section id="fees">
           <h2>4. Fee mechanism</h2>
           <p>
-            The creator chooses a fee between <b>1% and 5%</b> at launch. The same rate applies to buys and sells and cannot be
-            changed afterwards. The hook enforces a hard maximum of 5%.
+            The creator chooses a fee between <b>1% and 5%</b> at launch. It cannot be changed afterwards. The hook enforces a
+            hard maximum of 5%, and on coins launched with the newest hook the fee also responds to the market within that cap
+            (see <a href="#market-fees" style={link}>market-aware fees</a> below). Those coins also pay their creator a
+            separate <b>1% creator fee</b> on every trade, so the most any trade can cost is 6%.
           </p>
           <ul>
             <li>The fee is always taken in <b>ETH</b>, never in the coin, so fee collection never creates sell pressure.</li>
@@ -190,6 +192,12 @@ export default function Whitepaper() {
             </li>
             <li>Accrued fees can be collected by anyone and are paid only to that coin&apos;s treasury.</li>
           </ul>
+          <p>
+            <b>Creator fee.</b> On coins launched with the newest hook, every buy and sell also pays <b>1% in ETH to the
+            coin&apos;s creator</b>, on top of the coin&apos;s fee. It is kept apart from the split below, so the portfolio,
+            the platform and buybacks receive exactly what they did before. Buys from other chains pay it too. Creators claim
+            it from the coin&apos;s treasury, and only the creator can receive it.
+          </p>
           <div className="table-wrap">
             <table className="table">
               <thead>
@@ -212,7 +220,7 @@ export default function Whitepaper() {
                 </tr>
                 <tr>
                   <td><b>0%</b></td>
-                  <td>Creator</td>
+                  <td>Creator (new coins also pay a separate 1% creator fee, above)</td>
                   <td>0 ETH</td>
                 </tr>
               </tbody>
@@ -222,6 +230,44 @@ export default function Whitepaper() {
             The platform can adjust the split for coins launched in the future, but at least 50% of every coin&apos;s fees must go
             to its portfolio. The split of an existing coin is not changed by this.
           </p>
+          <h3>Buys that arrive from another chain</h3>
+          <p>
+            Coins launched with cross-chain support can also be bought from another chain. Those buys go through the Stakd
+            cross-chain router, which spends the buyer&apos;s bridged ETH in the same Uniswap v4 pool as everyone else. The
+            buyer pays the <strong>same fee</strong> — there is no second charge for arriving from elsewhere.
+          </p>
+          <p>
+            The only difference is where the coin&apos;s share of that fee goes. For a cross-chain buy it is used immediately to
+            <strong> buy the coin back and burn it</strong>, instead of funding the portfolio. The creator and platform shares are
+            unchanged. The hook tells the two apart by which contract made the swap, so this is enforced by the contracts rather
+            than by policy, and the cross-chain router address is set once and fixed forever.
+          </p>
+          <p>
+            This applies only to coins launched with this version of the hook. Coins already live keep exactly the rules they
+            launched with, because their hook can never be changed.
+          </p>
+          <h3 id="market-fees">Market-aware fees</h3>
+          <p>
+            Coins launched with the newest hook keep the creator&apos;s fee as their <b>base</b>, and the hook adjusts it to the
+            market on every swap. All of it is enforced in the hook, applies to every trade, and never takes the coin&apos;s fee
+            above 5%.
+          </p>
+          <ul>
+            <li>
+              <b>Volatility fee.</b> Recent price movement adds up to 2% on top of the base, about 0.05% for every 1% the price has
+              moved. The movement counted halves every 15 minutes, so the fee returns to the base as trading calms down. Pushing the
+              price and pulling it back within the same second adds nothing.
+            </li>
+            <li>
+              <b>Quick-flip fee.</b> Selling within 15 seconds of your own buy pays the 5% maximum. It targets sandwich bots and
+              instant round trips; anyone who holds for longer pays the normal fee.
+            </li>
+            <li>
+              <b>Defend mode.</b> When the price falls 20% below its high, the coin&apos;s share of fees goes straight to
+              buyback &amp; burn for the next 6 hours instead of funding the portfolio. Traders pay nothing extra, and the creator and
+              platform shares are unchanged. Another 20% fall from there starts it again.
+            </li>
+          </ul>
         </section>
 
         <section id="portfolio">

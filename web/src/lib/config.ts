@@ -11,7 +11,23 @@ export const robinhood = defineChain({
 
 export const chain = robinhood;
 
+/**
+ * The factory new coins launch from. v2 coins can also be bought from other chains, and those buys send the
+ * coin's fee share to buyback & burn instead of its portfolio.
+ */
 export const FACTORY = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS ?? "0x0000000000000000000000000000000000000000") as Address;
+
+/**
+ * Factories that came before. Their coins keep trading exactly as they always have — a launched coin's hook can
+ * never change — so the site keeps reading them; it just does not launch new coins there.
+ */
+export const LEGACY_FACTORIES = (process.env.NEXT_PUBLIC_LEGACY_FACTORIES ?? "0x019e1242e8d4b76Bc0A1dca1B912daA04323d355")
+  .split(",")
+  .map((a) => a.trim())
+  .filter((a) => /^0x[0-9a-fA-F]{40}$/.test(a) && a.toLowerCase() !== (process.env.NEXT_PUBLIC_FACTORY_ADDRESS ?? "").toLowerCase()) as Address[];
+
+/** Every factory the site reads from, newest first. */
+export const ALL_FACTORIES = [FACTORY, ...LEGACY_FACTORIES] as Address[];
 export const ETH_DECIMALS = 18;
 export const TOKEN_DECIMALS = 18;
 
@@ -79,7 +95,118 @@ export const quoterAbi = [
 ] as const;
 
 /** Optional per-coin profile (logo, description, socials). Written by the coin's creator. */
+/**
+ * Where cross-chain buys land. A buyer on another chain sends funds to a one-time address derived from their
+ * order; filling it buys the coin here and sends the coin's fee share to buyback & burn.
+ */
+export const ORDER_FACTORY = (process.env.NEXT_PUBLIC_ORDER_FACTORY ?? "0x5Ab981B9565F0Ec3d0Dfc26Bd6957D7Dac507594") as Address;
+
+/**
+ * An order factory buys through one cross-chain router, which serves one Stakd factory. Older factories that have
+ * their own keep them here as `factory:orderFactory` pairs (`NEXT_PUBLIC_FACTORY_ORDER_FACTORIES`); the current
+ * factory uses `ORDER_FACTORY`. A factory with neither has no Solana route.
+ */
+const ORDER_FACTORY_BY_FACTORY: Record<string, Address> = Object.fromEntries(
+  (process.env.NEXT_PUBLIC_FACTORY_ORDER_FACTORIES ?? "")
+    .split(",")
+    .map((pair) => pair.trim().split(":"))
+    .filter(([f, o]) => /^0x[0-9a-fA-F]{40}$/.test(f ?? "") && /^0x[0-9a-fA-F]{40}$/.test(o ?? ""))
+    .map(([f, o]) => [f.toLowerCase(), o as Address]),
+);
+
+export function orderFactoryFor(factory: Address | undefined): Address | undefined {
+  if (!factory) return undefined;
+  if (factory.toLowerCase() === FACTORY.toLowerCase()) return ORDER_FACTORY;
+  return ORDER_FACTORY_BY_FACTORY[factory.toLowerCase()];
+}
+
+export const orderFactoryAbi = [
+  {
+    type: "function",
+    name: "orderAddress",
+    stateMutability: "view",
+    inputs: [
+      {
+        name: "o",
+        type: "tuple",
+        components: [
+          { name: "token", type: "address" },
+          { name: "minTokensOut", type: "uint256" },
+          { name: "to", type: "bytes32" },
+          { name: "dstEid", type: "uint32" },
+          { name: "bridgeFee", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+          { name: "refundTo", type: "address" },
+          { name: "salt", type: "bytes32" },
+        ],
+      },
+    ],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "pending",
+    stateMutability: "view",
+    inputs: [
+      {
+        name: "o",
+        type: "tuple",
+        components: [
+          { name: "token", type: "address" },
+          { name: "minTokensOut", type: "uint256" },
+          { name: "to", type: "bytes32" },
+          { name: "dstEid", type: "uint32" },
+          { name: "bridgeFee", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+          { name: "refundTo", type: "address" },
+          { name: "salt", type: "bytes32" },
+        ],
+      },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "fill",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "o",
+        type: "tuple",
+        components: [
+          { name: "token", type: "address" },
+          { name: "minTokensOut", type: "uint256" },
+          { name: "to", type: "bytes32" },
+          { name: "dstEid", type: "uint32" },
+          { name: "bridgeFee", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+          { name: "refundTo", type: "address" },
+          { name: "salt", type: "bytes32" },
+        ],
+      },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
+
 export const METADATA = (process.env.NEXT_PUBLIC_METADATA_ADDRESS ?? "0xa55D5E6E5e80C22Ad09e7743E95D2152C09d800B") as Address;
+
+/**
+ * A metadata contract only accepts profiles for coins of the one factory it was deployed for, so factories launched
+ * later bring their own. `NEXT_PUBLIC_FACTORY_METADATA` lists them as `factory:metadata` pairs; any factory not
+ * listed falls back to `METADATA`.
+ */
+const METADATA_BY_FACTORY: Record<string, Address> = Object.fromEntries(
+  (process.env.NEXT_PUBLIC_FACTORY_METADATA ?? "")
+    .split(",")
+    .map((pair) => pair.trim().split(":"))
+    .filter(([f, m]) => /^0x[0-9a-fA-F]{40}$/.test(f ?? "") && /^0x[0-9a-fA-F]{40}$/.test(m ?? ""))
+    .map(([f, m]) => [f.toLowerCase(), m as Address]),
+);
+
+export function metadataFor(factory: Address | undefined): Address {
+  return (factory && METADATA_BY_FACTORY[factory.toLowerCase()]) || METADATA;
+}
 
 const META_TUPLE = {
   name: "m",

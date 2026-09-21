@@ -6,8 +6,8 @@ import { decodeEventLog } from "viem";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { avgLeverage, Basket } from "@/components/Basket";
 import { ImagePicker } from "@/components/ImagePicker";
-import { factoryAbi } from "@/lib/abis";
-import { chain, FACTORY, METADATA, metadataAbi } from "@/lib/config";
+import { factoryAbi, hookAbi } from "@/lib/abis";
+import { chain, FACTORY, metadataAbi, metadataFor } from "@/lib/config";
 import { useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd, type LighterMarket } from "@/lib/lighter";
 
@@ -53,6 +53,16 @@ export default function CreatePage() {
   const protocolPct = protocolBps.data !== undefined ? protocolBps.data / 100 : 40;
   const creatorPct = creatorBps.data !== undefined ? creatorBps.data / 100 : 0;
   const marginPct = 100 - creatorPct - protocolPct;
+  // Hooks with a creator fee pay the creator a fixed cut of every trade on top of the coin's fee. Older hooks have
+  // no such constant, so a failed read means there is none.
+  const hook = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "hook" });
+  const creatorFeeBps = useReadContract({
+    address: hook.data,
+    abi: hookAbi,
+    functionName: "CREATOR_FEE_BPS",
+    query: { enabled: !!hook.data, retry: false },
+  });
+  const creatorFeePct = creatorFeeBps.data ? creatorFeeBps.data / 100 : 0;
 
   const totalWeight = legs.reduce((s, l) => s + l.weight, 0);
   const chainLegs: Leg[] = legs.map((l) => ({
@@ -127,7 +137,7 @@ export default function CreatePage() {
         try {
           setStep("Confirm your coin profile…");
           const h = await writeContractAsync({
-            address: METADATA,
+            address: metadataFor(FACTORY),
             abi: metadataAbi,
             functionName: "setMetadata",
             args: [
@@ -337,14 +347,19 @@ export default function CreatePage() {
           <div>
             <label className="label">Trading fee {feePct}%</label>
             <input type="range" min={1} max={5} step={0.5} value={feePct} onChange={(e) => setFeePct(Number(e.target.value))} />
-            <div className="muted small">1%–5%, paid in ETH on every buy and sell</div>
+            <div className="muted small">
+              1%–5%, paid in ETH on every buy and sell
+              {creatorFeePct > 0 ? ` · traders pay ${feePct + creatorFeePct}% including your ${creatorFeePct}%` : ""}
+            </div>
           </div>
           <div>
             <label className="label">Where fees go</label>
             <div style={{ fontWeight: 700, fontSize: 15, padding: "10px 0" }}>
               {marginPct}% portfolio · {protocolPct}% platform{creatorPct > 0 ? ` · ${creatorPct}% you` : ""}
             </div>
-            <div className="muted small">All fees are paid in ETH</div>
+            <div className="muted small">
+              {creatorFeePct > 0 ? `Plus ${creatorFeePct}% of every trade to you, in ETH` : "All fees are paid in ETH"}
+            </div>
           </div>
           <div>
             <label className="label">Liquidity</label>
@@ -375,6 +390,7 @@ export default function CreatePage() {
         <Summary label="Supply" value="1,000,000,000" />
         <Summary label="ETH to launch" value="0 · gas only" />
         <Summary label="Fee split" value={`${marginPct}% portfolio · ${protocolPct}% platform${creatorPct > 0 ? ` · ${creatorPct}% you` : ""}`} />
+        {creatorFeePct > 0 && <Summary label="You earn" value={`${creatorFeePct}% of every buy and sell, in ETH`} />}
         <Summary label="Exposure per $100 margin" value={formatUsd(avgLeverage(chainLegs) * 100)} />
         <Summary label="Profit to buyback & burn" value="75%" />
         <div className="divider" />

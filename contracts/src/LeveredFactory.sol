@@ -60,6 +60,8 @@ contract LeveredFactory is Ownable, IUnlockCallback {
 
     address public hook;
     address public router;
+    /// @notice Buys arriving through this contract pay the same fee, but the coin's share buys back and burns.
+    address public crosschainRouter;
 
     /// @notice Launch price as a tick of ETH-per-token (raw units).
     int24 public startTick;
@@ -90,6 +92,7 @@ contract LeveredFactory is Ownable, IUnlockCallback {
         Leg[] legs
     );
     event PeripheralsSet(address hook, address router);
+    event CrosschainRouterSet(address router);
     event KeeperSet(address indexed keeper, bool allowed);
     event MarginConfigSet(MarginConfig config);
     event MarginConfigProposed(MarginConfig config, uint256 eta);
@@ -268,6 +271,18 @@ contract LeveredFactory is Ownable, IUnlockCallback {
         hook = hook_;
         router = router_;
         emit PeripheralsSet(hook_, router_);
+    }
+
+    /// @notice Set the cross-chain router: the one contract whose buys route a coin's fee share to buyback & burn
+    ///         instead of its leveraged portfolio. Set once, then fixed forever, like the peripherals.
+    function setCrosschainRouter(address router_) external onlyOwner {
+        if (crosschainRouter != address(0)) revert AlreadySet();
+        if (router_ == address(0)) revert BadPeripheral();
+        // Pointing this at the ordinary router would send *every* coin's fees to burns and leave every
+        // portfolio unfunded, so refuse it outright rather than trust a careful hand.
+        if (router_ == router) revert BadPeripheral();
+        crosschainRouter = router_;
+        emit CrosschainRouterSet(router_);
     }
 
     function setKeeper(address keeper, bool allowed) external onlyOwner {
