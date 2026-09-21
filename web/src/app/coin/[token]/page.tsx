@@ -11,7 +11,7 @@ import { BuyFromSolana } from "@/components/BuyFromSolana";
 import { CoinActivity } from "@/components/CoinActivity";
 import { useQuery } from "@tanstack/react-query";
 import { factoryAbi, hookAbi, routerAbi, tokenAbi, treasuryAbi } from "@/lib/abis";
-import { chain, erc20Abi, ETH_DECIMALS, explorerAddress, isHiddenCoin, METADATA, metadataAbi, POOL_MANAGER, poolManagerAbi, quoterAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
+import { chain, erc20Abi, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, POOL_MANAGER, poolManagerAbi, quoterAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
 import { useCoinFactory, useEthPrice, useLighterAccount, useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 import { decodePoolState, ethPerToken, POOL_STATE_SLOTS, poolStateSlot, sqrtPriceFromSlots } from "@/lib/pool";
@@ -49,7 +49,8 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
 
   const hookAddress = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "hook", query: { enabled: !!coinFactory } });
   const poolKey = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "poolKeyOf", args: [token], query: { enabled: !!coinFactory } });
-  const meta = useReadContract({ address: METADATA, abi: metadataAbi, functionName: "metadata", args: [token] });
+  const METADATA = metadataFor(coinFactory);
+  const meta = useReadContract({ address: METADATA, abi: metadataAbi, functionName: "metadata", args: [token], query: { enabled: !!coinFactory } });
   const poolId = coin.data?.poolId;
 
   const info = useReadContracts({
@@ -159,7 +160,7 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
 
         {profile?.description && <div className="card stack small coin-description">{profile.description}</div>}
 
-        {isCreator && <ProfileEditor token={token} current={profile} onSaved={() => meta.refetch()} />}
+        {isCreator && <ProfileEditor token={token} metadata={METADATA} current={profile} onSaved={() => meta.refetch()} />}
 
         {poolId && <LiveChart poolId={poolId} />}
 
@@ -501,7 +502,17 @@ type Profile = { image: string; description: string; telegram: string; x: string
 const EMPTY_PROFILE: Profile = { image: "", description: "", telegram: "", x: "", website: "" };
 
 /** Creator-only profile editor. Every field is optional; blank fields simply clear. */
-function ProfileEditor({ token, current, onSaved }: { token: Address; current: Profile | undefined; onSaved: () => void }) {
+function ProfileEditor({
+  token,
+  metadata,
+  current,
+  onSaved,
+}: {
+  token: Address;
+  metadata: Address;
+  current: Profile | undefined;
+  onSaved: () => void;
+}) {
   const { writeContractAsync } = useWriteContract();
   const client = usePublicClient();
   const [open, setOpen] = useState(false);
@@ -524,7 +535,7 @@ function ProfileEditor({ token, current, onSaved }: { token: Address; current: P
     setBusy(true);
     try {
       const hash = await writeContractAsync({
-        address: METADATA,
+        address: metadata,
         abi: metadataAbi,
         functionName: "setMetadata",
         args: [token, form],

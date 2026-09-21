@@ -1,6 +1,6 @@
 import { createPublicClient, formatUnits, http, type Address, type Hex } from "viem";
 import { factoryAbi, hookAbi, tokenAbi, treasuryAbi } from "@/lib/abis";
-import { chain, FACTORY, METADATA, metadataAbi, POOL_MANAGER, poolManagerAbi, TOKEN_DECIMALS } from "@/lib/config";
+import { ALL_FACTORIES, chain, metadataAbi, metadataFor, POOL_MANAGER, poolManagerAbi, TOKEN_DECIMALS } from "@/lib/config";
 import type { Leg } from "@/lib/hooks";
 import { ethPerToken, POOL_STATE_SLOTS, poolStateSlot, sqrtPriceFromSlots } from "@/lib/pool";
 
@@ -23,8 +23,17 @@ export type CoinSummary = {
 };
 
 export async function getCoinSummary(token: Address): Promise<CoinSummary | null> {
-  const id = await client.readContract({ address: FACTORY, abi: factoryAbi, functionName: "coinIdOf", args: [token] });
-  if (!id) return null;
+  // A coin keeps the factory it launched from, so look in every factory, newest first.
+  let FACTORY: Address | undefined;
+  let id = 0n;
+  for (const f of ALL_FACTORIES) {
+    id = await client.readContract({ address: f, abi: factoryAbi, functionName: "coinIdOf", args: [token] }).catch(() => 0n);
+    if (id) {
+      FACTORY = f;
+      break;
+    }
+  }
+  if (!FACTORY || !id) return null;
   const [coin, hook] = await Promise.all([
     client.readContract({ address: FACTORY, abi: factoryAbi, functionName: "coin", args: [id - 1n] }),
     client.readContract({ address: FACTORY, abi: factoryAbi, functionName: "hook" }),
@@ -41,7 +50,7 @@ export async function getCoinSummary(token: Address): Promise<CoinSummary | null
     read<bigint>({ address: treasury, abi: treasuryAbi, functionName: "totalFeesReceived" }),
     read<bigint>({ address: treasury, abi: treasuryAbi, functionName: "totalTokensBurned" }),
     read<readonly Hex[]>({ address: POOL_MANAGER, abi: poolManagerAbi, functionName: "extsload", args: [poolStateSlot(poolId), POOL_STATE_SLOTS] }),
-    read<{ image?: string }>({ address: METADATA, abi: metadataAbi, functionName: "metadata", args: [token] }),
+    read<{ image?: string }>({ address: metadataFor(FACTORY), abi: metadataAbi, functionName: "metadata", args: [token] }),
   ]);
 
   const [usdPerEth, markets] = await Promise.all([ethUsd(), marketSymbols()]);

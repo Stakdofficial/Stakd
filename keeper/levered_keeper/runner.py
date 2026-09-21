@@ -129,10 +129,19 @@ class Keeper:
             self.chain.send(treasury.functions.setLighterAccount(cs.sub_account_index), f"setLighterAccount {cs.sub_account_index}")
 
     def sub_accounts_in_use(self) -> set[int]:
-        """Sub-accounts claimed by any coin, in keeper state or bound on-chain."""
+        """Sub-accounts claimed by any coin, in keeper state or bound on-chain — this factory's coins and those of
+        sibling factories whose keepers share the same Lighter master account. Adopting one of theirs would put two
+        coins' money in one account and rotate the other keeper's API key out from under it."""
         used = {cs.sub_account_index for cs in self.state.coins.values() if cs.sub_account_index is not None}
-        for coin in self.chain.coins():
-            treasury = self.chain.treasury(coin["treasury"])
+        for path in self.cfg.sibling_state_paths:
+            # Covers a sibling that has claimed an account but not yet bound it on-chain.
+            if path.exists():
+                used |= {cs.sub_account_index for cs in State.load(path).coins.values() if cs.sub_account_index is not None}
+        treasuries = [coin["treasury"] for coin in self.chain.coins()]
+        for factory in self.cfg.sibling_factories:
+            treasuries += self.chain.treasuries_of(factory)
+        for address in treasuries:
+            treasury = self.chain.treasury(address)
             if treasury.functions.lighterAccountSet().call():
                 used.add(treasury.functions.lighterAccountIndex().call())
         return used

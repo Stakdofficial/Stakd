@@ -41,6 +41,10 @@ class Config:
     min_gas_eth: float
 
     withdraw_mode: str = "secure"  # Lighter on Robinhood pays withdrawals out on Robinhood Chain itself
+    # Other Stakd factories whose keepers share this Lighter master account, and those keepers' state files.
+    # A sub-account used by any of their coins must never be adopted here.
+    sibling_factories: tuple[str, ...] = ()
+    sibling_state_paths: tuple[Path, ...] = ()
 
 
 def _get(name: str, default: str | None = None) -> str:
@@ -84,4 +88,6 @@ def load() -> Config:
         max_drawdown=float(_get("MAX_DRAWDOWN", "0.35")),
         alert_webhook_url=os.getenv("ALERT_WEBHOOK_URL", ""),
         min_gas_eth=float(_get("MIN_GAS_ETH", "0.001")),
+        sibling_factories=tuple(a.strip() for a in os.getenv("LEVERED_SIBLING_FACTORIES", "").split(",") if a.strip()),
+        sibling_state_paths=tuple(Path(p.strip()) for p in os.getenv("LEVERED_SIBLING_STATE_PATHS", "").split(",") if p.strip()),
     )

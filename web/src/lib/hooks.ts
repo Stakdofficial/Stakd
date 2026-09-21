@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
-import { ALL_FACTORIES, FACTORY, isHiddenCoin, METADATA, metadataAbi } from "./config";
+import { ALL_FACTORIES, FACTORY, isHiddenCoin, metadataAbi, metadataFor } from "./config";
 import { factoryAbi, tokenAbi, treasuryAbi } from "./abis";
 import type { LighterAccount, LighterMarket } from "./lighter";
 
@@ -94,7 +94,8 @@ export function useCoins(limit = 48) {
     })),
   });
   const page = {
-    data: pages.data?.flatMap((r) => (r.status === "success" ? r.result : [])),
+    // Keep which factory each coin came from: its profile lives in that factory's metadata contract.
+    data: pages.data?.flatMap((r, i) => (r.status === "success" ? r.result.map((c) => ({ ...c, factory: ALL_FACTORIES[i] })) : [])),
     isLoading: pages.isLoading,
     isSuccess: pages.isSuccess,
     error: pages.error,
@@ -120,7 +121,7 @@ export function useCoins(limit = 48) {
   // Profiles are optional, so failures here must never break the list.
   const metas = useReadContracts({
     allowFailure: true,
-    contracts: base.map((c) => ({ address: METADATA, abi: metadataAbi, functionName: "metadata" as const, args: [c.token] })),
+    contracts: base.map((c) => ({ address: metadataFor(c.factory), abi: metadataAbi, functionName: "metadata" as const, args: [c.token] })),
     query: { enabled: base.length > 0, refetchInterval: 60_000 },
   });
 

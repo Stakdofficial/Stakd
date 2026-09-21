@@ -119,3 +119,50 @@ def test_old_hook_without_creator_fee_is_asked_once_and_defend_still_works():
 
 def test_to_eth_matches_threshold_units():
     assert to_eth(WEI) == 1
+
+
+# ---------------------------------------------------------------------- sub-accounts shared across factories
+
+from pathlib import Path  # noqa: E402
+
+from levered_keeper.state import CoinState, State  # noqa: E402
+
+
+class FakeTreasury:
+    def __init__(self, bound):
+        self.bound = bound
+        self.functions = self
+
+    def lighterAccountSet(self):
+        return Call(self.bound is not None)
+
+    def lighterAccountIndex(self):
+        return Call(self.bound)
+
+
+class SubAccountChain:
+    def __init__(self, own, siblings):
+        self.own, self.siblings = own, siblings  # treasury address -> bound index (or None)
+
+    def coins(self):
+        return [{"treasury": t} for t in self.own]
+
+    def treasuries_of(self, factory):
+        return list(self.siblings[factory])
+
+    def treasury(self, address):
+        return FakeTreasury({**self.own, **{k: v for s in self.siblings.values() for k, v in s.items()}}[address])
+
+
+def test_sub_accounts_of_sibling_factories_are_never_adopted(tmp_path: Path):
+    sibling_state = tmp_path / "sibling.json"
+    s = State()
+    s.coins["0xc"] = CoinState(token="0xc", treasury="0xtc", sub_account_index=9)  # claimed, not yet bound on-chain
+    s.save(sibling_state)
+
+    k = Keeper.__new__(Keeper)
+    k.state = State()
+    k.state.coins["0xa"] = CoinState(token="0xa", treasury="0xta", sub_account_index=3)
+    k.chain = SubAccountChain(own={"0xta": 3, "0xtx": None}, siblings={"0xF2": {"0xt2": 7, "0xt3": None}})
+    k.cfg = SimpleNamespace(sibling_factories=("0xF2",), sibling_state_paths=(sibling_state, tmp_path / "missing.json"))
+    assert k.sub_accounts_in_use() == {3, 7, 9}

@@ -172,6 +172,23 @@ export const orderFactoryAbi = [
 
 export const METADATA = (process.env.NEXT_PUBLIC_METADATA_ADDRESS ?? "0xa55D5E6E5e80C22Ad09e7743E95D2152C09d800B") as Address;
 
+/**
+ * A metadata contract only accepts profiles for coins of the one factory it was deployed for, so factories launched
+ * later bring their own. `NEXT_PUBLIC_FACTORY_METADATA` lists them as `factory:metadata` pairs; any factory not
+ * listed falls back to `METADATA`.
+ */
+const METADATA_BY_FACTORY: Record<string, Address> = Object.fromEntries(
+  (process.env.NEXT_PUBLIC_FACTORY_METADATA ?? "")
+    .split(",")
+    .map((pair) => pair.trim().split(":"))
+    .filter(([f, m]) => /^0x[0-9a-fA-F]{40}$/.test(f ?? "") && /^0x[0-9a-fA-F]{40}$/.test(m ?? ""))
+    .map(([f, m]) => [f.toLowerCase(), m as Address]),
+);
+
+export function metadataFor(factory: Address | undefined): Address {
+  return (factory && METADATA_BY_FACTORY[factory.toLowerCase()]) || METADATA;
+}
+
 const META_TUPLE = {
   name: "m",
   type: "tuple",

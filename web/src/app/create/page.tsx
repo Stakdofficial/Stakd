@@ -7,7 +7,7 @@ import { useAccount, usePublicClient, useReadContract, useWriteContract } from "
 import { avgLeverage, Basket } from "@/components/Basket";
 import { ImagePicker } from "@/components/ImagePicker";
 import { factoryAbi, hookAbi } from "@/lib/abis";
-import { chain, FACTORY, METADATA, metadataAbi } from "@/lib/config";
+import { chain, FACTORY, metadataAbi, metadataFor } from "@/lib/config";
 import { useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd, type LighterMarket } from "@/lib/lighter";
 
@@ -137,7 +137,7 @@ export default function CreatePage() {
         try {
           setStep("Confirm your coin profile…");
           const h = await writeContractAsync({
-            address: METADATA,
+            address: metadataFor(FACTORY),
             abi: metadataAbi,
             functionName: "setMetadata",
             args: [
