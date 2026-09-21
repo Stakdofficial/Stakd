@@ -28,7 +28,9 @@ export default async function Image({ params }: { params: Promise<{ token: strin
   const stats = [
     { k: "Market cap", v: usd(coin.marketCapUsd) },
     { k: "Fees earned", v: usd(coin.feesUsd) },
-    { k: "Trading fee", v: coin.creatorPct > 0 ? `${coin.feePct}% + ${coin.creatorPct}% creator` : `${coin.feePct}% in ETH` },
+    coin.creatorPct > 0
+      ? { k: "Fee + creator", v: `${coin.feePct}% + ${coin.creatorPct}%` }
+      : { k: "Trading fee", v: `${coin.feePct}% in ETH` },
     { k: "Burned", v: coin.burned > 0 ? compact(coin.burned) : "Soon" },
   ];
 
