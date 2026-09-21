@@ -32,9 +32,9 @@ export default function Home() {
         <div className="container hero-split">
           <div className="hero-copy">
             <Reveal>
-              <span className="pill">
-                <span className="pill-dot" /> Live on Robinhood Chain mainnet · trades on Lighter
-              </span>
+              <a href="#hook-v3" className="pill">
+                <span className="pill-dot" /> New · Hook v3 is live · creators earn 1% of every trade
+              </a>
             </Reveal>
             <Reveal delay={80}>
               <h1 className="display">
@@ -44,7 +44,7 @@ export default function Home() {
             <Reveal delay={160}>
               <p className="lead">
                 Pick up to six stock or crypto markets. Trading fees become margin, the portfolio trades perps on
-                Lighter, and profits buy back and burn your coin.
+                Lighter, and profits buy back and burn your coin. You earn 1% of every trade, in ETH.
               </p>
             </Reveal>
             <Reveal delay={240} className="hero-ctas">
@@ -56,7 +56,7 @@ export default function Home() {
               </a>
             </Reveal>
             <Reveal delay={320} className="hero-trust">
-              {["Paired with ETH", "No ETH to launch", "Liquidity locked forever", "75% of profit burned", "Buyable with SOL"].map((t) => (
+              {["Creators earn 1%", "Paired with ETH", "No ETH to launch", "Liquidity locked forever", "75% of profit burned", "Buyable with SOL"].map((t) => (
                 <span key={t} className="trust-item">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                     <path d="m20 6-11 11-5-5" />
@@ -72,6 +72,31 @@ export default function Home() {
 
       <section className="bleed ticker-band">
         <Ticker />
+      </section>
+
+      <section className="section" id="hook-v3">
+        <Reveal className="section-head">
+          <span className="eyebrow">New · Hook v3 · live on mainnet</span>
+          <h2 className="section-title">The fee that fights back — and pays creators</h2>
+          <p className="lead center">
+            Every coin launched from today reads the market on every swap. Creators get paid, bots pay the most, and
+            when the chart bleeds, fees turn into burns.
+          </p>
+        </Reveal>
+        <div className="v3-grid">
+          {V3.map((f, i) => (
+            <Reveal key={f.tag} delay={i * 80} className={`v3-card${f.creator ? " creator" : ""}`}>
+              <span className="v3-tag">{f.tag}</span>
+              <h3>{f.title}</h3>
+              <p>{f.body}</p>
+              <div className="v3-spec">{f.spec}</div>
+            </Reveal>
+          ))}
+        </div>
+        <Reveal delay={320} className="routes-note">
+          The coin&apos;s own fee never goes above 5%, so a trade costs at most 6% with the creator&apos;s 1%. Coins launched
+          before Hook v3 keep the rules they launched with.
+        </Reveal>
       </section>
 
       <section className="section">
@@ -188,7 +213,7 @@ export default function Home() {
         <Reveal className="cta-band">
           <div className="cta-glow" aria-hidden />
           <h2>Your basket. Your coin.</h2>
-          <p>Launch in a minute. Fees start funding the portfolio from the very first trade.</p>
+          <p>Launch in a minute. From the very first trade, fees fund the portfolio and 1% goes to you.</p>
           <Link href="/create" className="btn btn-white btn-lg">
             Launch a coin →
           </Link>
@@ -198,10 +223,46 @@ export default function Home() {
   );
 }
 
+const V3: { tag: string; title: string; body: string; spec: string; creator?: boolean }[] = [
+  {
+    tag: "Creator fee",
+    title: "Creators earn 1% of every trade",
+    body: "Every buy and sell — including buys from Solana — pays the coin's creator 1% in ETH, on top of the coin's fee. The portfolio, platform and burns keep their full share.",
+    spec: "1% · in ETH · paid out automatically",
+    creator: true,
+  },
+  {
+    tag: "Defend mode",
+    title: "The chart bleeds. The fees burn.",
+    body: "When the price falls 20% below its high, the coin's share of every fee goes straight to buyback & burn for six hours instead of the portfolio. Traders pay nothing extra.",
+    spec: "−20% trigger · 6h · 60% → burn",
+  },
+  {
+    tag: "Bot tax",
+    title: "Flip in 15 seconds, pay the max",
+    body: "Selling within 15 seconds of your own buy pays the full 5% coin fee, so sandwich bots and instant round trips fund the coin. Hold a moment longer and you pay the normal fee.",
+    spec: "15s window · 5% on the flip",
+  },
+  {
+    tag: "Volatility fee",
+    title: "Wild candles pay more",
+    body: "The coin's fee rises with recent price movement and fades back to the creator's rate as the market calms, so the busiest minutes fund the coin the most.",
+    spec: "+0.05% per 1% move · up to +2%",
+  },
+];
+
 const FAQ: [string, string][] = [
   [
     "Where does the margin come from?",
     "From trading fees. Every buy and sell pays the coin's fee (1–5%) in ETH through a Uniswap v4 hook. 60% is swapped to USDG and deposited into Lighter as the coin's trading margin, and 40% goes to the platform.",
+  ],
+  [
+    "Do creators earn anything?",
+    "Yes, on coins launched with Hook v3. Every buy and sell pays the creator 1% in ETH on top of the coin's fee, and it's paid out to the creator's wallet automatically. Only the creator can receive it.",
+  ],
+  [
+    "Why did my sell cost more than the usual fee?",
+    "On Hook v3 coins the fee reacts to the market: selling within 15 seconds of your own buy pays the 5% maximum, and fast-moving prices add up to 2%. Wait a moment for the normal fee.",
   ],
   [
     "Who places the trades?",
@@ -241,7 +302,10 @@ function CoinCard({ coin, markets }: { coin: CoinSummary; markets?: Map<number, 
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="spread">
             <strong>{coin.name}</strong>
-            <span className="chip chip-soft">{avgLeverage(coin.legs).toFixed(1)}x</span>
+            <span className="row" style={{ gap: 6 }}>
+              {coin.factory.toLowerCase() === FACTORY.toLowerCase() && <span className="v3-badge">v3</span>}
+              <span className="chip chip-soft">{avgLeverage(coin.legs).toFixed(1)}x</span>
+            </span>
           </div>
           <div className="muted small">
             ${coin.symbol} · {status}

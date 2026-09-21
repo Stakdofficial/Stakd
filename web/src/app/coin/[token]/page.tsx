@@ -74,6 +74,14 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
     query: { enabled: !!treasury && !!hookAddress.data && !!poolId, refetchInterval: 10_000 },
   });
 
+  // Hook v3 treasuries track the creator's 1%; older ones have no such counter, so a failed read means none.
+  const creatorPaid = useReadContract({
+    address: treasury,
+    abi: treasuryAbi,
+    functionName: "totalCreatorFees",
+    query: { enabled: !!treasury, retry: false, refetchInterval: 20_000 },
+  });
+
   const lighter = useLighterAccount(info.data?.[11] as bigint | undefined, !!info.data?.[10]);
 
   if (id.isSuccess && id.data === 0n) return <div className="card empty">This token was not launched on Stakd.</div>;
@@ -222,6 +230,7 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
           <Stat k="Bought back" v={ethStr(bought) + usd(bought)} />
           <Stat k="Burned" v={`${compact(burned)} ${symbol}`} />
           <Stat k="Fees waiting to collect" v={ethStr(pendingFees) + usd(pendingFees)} />
+          {creatorPaid.data !== undefined && <Stat k="Earned by creator (1%)" v={ethStr(creatorPaid.data) + usd(creatorPaid.data)} />}
         </div>
       </div>
 

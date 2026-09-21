@@ -27,6 +27,8 @@ export type CoinSummary = {
   lighterAccountIndex: bigint;
   /** Creator-set logo from StakdMetadata, if they added one. */
   image?: string;
+  /** The factory the coin launched from; its hook sets the coin's fee rules for good. */
+  factory: Address;
 };
 
 export function useMarkets() {
@@ -146,6 +148,7 @@ export function useCoins(limit = 48) {
           lighterAccountSet: r[8] as boolean,
           lighterAccountIndex: r[9] as bigint,
           image: (metas.data?.[i]?.result as { image?: string } | undefined)?.image || undefined,
+          factory: c.factory,
         };
       })
     : base.length === 0 && page.isSuccess

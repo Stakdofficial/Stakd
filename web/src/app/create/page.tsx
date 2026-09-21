@@ -179,6 +179,16 @@ export default function CreatePage() {
           </p>
         </div>
 
+        {creatorFeePct > 0 && (
+          <div className="earn-banner">
+            <strong>+{creatorFeePct}%</strong>
+            <span>
+              You earn {creatorFeePct}% of every buy and sell on your coin, in ETH — paid out automatically, for as long as
+              it trades. New coins also get defend mode, the bot tax and the volatility fee.
+            </span>
+          </div>
+        )}
+
         <div className="card grid" style={{ gridTemplateColumns: "2fr 1fr" }}>
           <div>
             <label className="label">Name</label>

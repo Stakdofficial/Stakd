@@ -16,6 +16,8 @@ export type CoinSummary = {
   priceUsd: number;
   marketCapUsd: number;
   feePct: number;
+  /** The creator fee paid on top of the coin's fee (Hook v3 coins); 0 on older hooks. */
+  creatorPct: number;
   feesEth: number;
   feesUsd: number;
   burned: number;
@@ -53,7 +55,12 @@ export async function getCoinSummary(token: Address): Promise<CoinSummary | null
     read<{ image?: string }>({ address: metadataFor(FACTORY), abi: metadataAbi, functionName: "metadata", args: [token] }),
   ]);
 
-  const [usdPerEth, markets] = await Promise.all([ethUsd(), marketSymbols()]);
+  const [usdPerEth, markets, creatorBps] = await Promise.all([
+    ethUsd(),
+    marketSymbols(),
+    // Older hooks have no creator fee, and the call reverts.
+    read<number>({ address: hook as Address, abi: hookAbi, functionName: "CREATOR_FEE_BPS" }).catch(() => 0),
+  ]);
   const priceUsd = ethPerToken(sqrtPriceFromSlots(slots)) * usdPerEth;
   const feesEth = Number(formatUnits(fees, 18));
   return {
@@ -63,6 +70,7 @@ export async function getCoinSummary(token: Address): Promise<CoinSummary | null
     priceUsd,
     marketCapUsd: priceUsd * Number(formatUnits(supply, TOKEN_DECIMALS)),
     feePct: pool[1] / 100,
+    creatorPct: Number(creatorBps) / 100,
     feesEth,
     feesUsd: feesEth * usdPerEth,
     burned: Number(formatUnits(burned, TOKEN_DECIMALS)),

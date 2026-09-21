@@ -18,6 +18,9 @@
   --green-soft: #ecfdf5;
   --red: #dc2626;
   --red-soft: #fef2f2;
+  --gold: #b45309;
+  --gold-soft: #fff7e6;
+  --gold-edge: #fcd9a0;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(15, 39, 68, 0.04), 0 8px 24px rgba(59, 130, 246, 0.08);
   --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -1931,6 +1934,9 @@ body {
 
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --gold: #fbbf24;
+  --gold-soft: rgba(251, 191, 36, 0.1);
+  --gold-edge: rgba(251, 191, 36, 0.35);
   --bg: #060e1c;
   --bg-soft: #0b1729;
   --surface: #0e1b31;
@@ -2055,4 +2061,95 @@ body,
   .docs-body h2, .docs-body h3 { break-after: avoid; }
   .docs-callout, .docs-steps li, .table tr { break-inside: avoid; }
   a { color: inherit !important; }
+}
+
+/* ---------------------------------------------------------------- Hook v3 */
+
+.v3-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+}
+
+.v3-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.v3-card h3 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.v3-card p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.v3-card .v3-spec {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.v3-tag {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 8px;
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.v3-card.creator {
+  border-color: var(--gold-edge);
+  background: linear-gradient(160deg, var(--gold-soft), var(--surface) 70%);
+}
+
+.v3-card.creator .v3-tag {
+  color: var(--gold);
+  background: var(--gold-soft);
+}
+
+.v3-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--gold);
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-edge);
+}
+
+.earn-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--gold-edge);
+  border-radius: var(--radius);
+  background: var(--gold-soft);
+}
+
+.earn-banner strong {
+  color: var(--gold);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }

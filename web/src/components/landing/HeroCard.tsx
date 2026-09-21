@@ -1,6 +1,7 @@
 "use client";
 
-/** How Stakd works, at a glance: a trade's ETH fee split into the portfolio and the platform, then profit → burn. */
+/** How Stakd works, at a glance: a trade's ETH fee split into the portfolio and the platform (plus the creator's 1%
+ *  on Hook v3 coins), then profit → burn. */
 export function HeroCard() {
   return (
     <div className="hero-visual" aria-hidden>
@@ -42,6 +43,7 @@ export function HeroCard() {
             <div className="split-a" />
             <div className="split-b" />
           </div>
+          <div className="small" style={{ marginTop: 8, color: "var(--gold)", fontWeight: 700 }}>+1% of every trade to the creator</div>
         </div>
 
         <div className="engine-step">
