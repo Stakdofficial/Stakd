@@ -112,7 +112,7 @@ contract ExactOutSwapper is IUnlockCallback {
     }
 }
 
-contract LeveredTest is Test {
+abstract contract LeveredTestBase is Test {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
@@ -134,7 +134,7 @@ contract LeveredTest is Test {
     address creator = makeAddr("creator");
     address trader = makeAddr("trader");
 
-    function setUp() public {
+    function setUp() public virtual {
         pm = new PoolManager(address(this));
         usdg = new MockUSDG();
         lighter = new MockLighter();
@@ -290,6 +290,7 @@ contract LeveredTest is Test {
         (LeveredToken tok,) = _create();
         uint256 got = _buy(trader, tok, 1 ether);
         uint256 afterBuy = hook.pendingFees(_poolId(tok));
+        vm.warp(block.timestamp + 1 days); // past the quick-flip window, with the buy's price move faded out
 
         uint256 ethOut = _sell(trader, tok, got);
         uint256 sellFee = hook.pendingFees(_poolId(tok)) - afterBuy;
@@ -311,6 +312,7 @@ contract LeveredTest is Test {
         assertApproxEqAbs(buyFee, (paid - buyFee) * FEE_BPS / 10_000, 1);
 
         // Exact-out sell: receive exactly 0.001 ETH; fee is 2% of that (beforeSwap path).
+        vm.warp(block.timestamp + 1 days); // past the quick-flip window, with the buy's price move faded out
         vm.startPrank(trader);
         tok.approve(address(exactOut), type(uint256).max);
         uint256 ethBefore = trader.balance;
@@ -553,3 +555,6 @@ contract LeveredTest is Test {
         assertLt(back, ethIn);
     }
 }
+
+/// @dev Concrete runner for the base suite; `CrossChain.t.sol` reuses the same setup.
+contract LeveredTest is LeveredTestBase {}

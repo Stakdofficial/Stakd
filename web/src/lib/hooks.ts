@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
-import { FACTORY, isHiddenCoin, METADATA, metadataAbi } from "./config";
+import { ALL_FACTORIES, FACTORY, isHiddenCoin, METADATA, metadataAbi } from "./config";
 import { factoryAbi, tokenAbi, treasuryAbi } from "./abis";
 import type { LighterAccount, LighterMarket } from "./lighter";
 
@@ -78,11 +78,33 @@ const TREASURY_FIELDS = [
   "lighterAccountIndex",
 ] as const;
 
-/** Loads coins (newest first) with token metadata and treasury stats in two multicalls. */
+/**
+ * Loads coins (newest first) with token metadata and treasury stats.
+ * Reads every factory, not just the current one: a coin launched from an older factory keeps trading under the
+ * rules it launched with, so it belongs in the list just the same.
+ */
 export function useCoins(limit = 48) {
-  const page = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "coins", args: [0n, BigInt(limit)] });
+  const pages = useReadContracts({
+    allowFailure: true,
+    contracts: ALL_FACTORIES.map((address) => ({
+      address,
+      abi: factoryAbi,
+      functionName: "coins" as const,
+      args: [0n, BigInt(limit)] as const,
+    })),
+  });
+  const page = {
+    data: pages.data?.flatMap((r) => (r.status === "success" ? r.result : [])),
+    isLoading: pages.isLoading,
+    isSuccess: pages.isSuccess,
+    error: pages.error,
+  };
   // Hidden coins are dropped before the detail reads, so they cost no RPC calls either.
-  const base = (page.data ?? []).filter((c) => !isHiddenCoin(c.token));
+  const base = (page.data ?? [])
+    .filter((c) => !isHiddenCoin(c.token))
+    .slice()
+    .sort((a, b) => Number(b.createdAt) - Number(a.createdAt))
+    .slice(0, limit);
 
   const details = useReadContracts({
     allowFailure: false,
@@ -130,4 +152,29 @@ export function useCoins(limit = 48) {
       : undefined;
 
   return { coins, isLoading: page.isLoading || details.isLoading, error: page.error ?? details.error };
+}
+
+/**
+ * Which factory launched this coin.
+ * Coins from older factories keep working under the rules they launched with, so every page that needs a
+ * coin's hook, router or pool has to ask the factory that actually created it — not whichever one is current.
+ */
+export function useCoinFactory(token: Address) {
+  const ids = useReadContracts({
+    allowFailure: true,
+    contracts: ALL_FACTORIES.map((address) => ({
+      address,
+      abi: factoryAbi,
+      functionName: "coinIdOf" as const,
+      args: [token] as const,
+    })),
+    query: { enabled: /^0x[0-9a-fA-F]{40}$/.test(token) },
+  });
+
+  const i = ids.data?.findIndex((r) => r.status === "success" && (r.result as bigint) > 0n) ?? -1;
+  return {
+    factory: i >= 0 ? ALL_FACTORIES[i] : undefined,
+    isLegacy: i > 0,
+    isLoading: ids.isLoading,
+  };
 }

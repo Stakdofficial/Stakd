@@ -53,3 +53,10 @@ __pycache__/
 
 # ---- OS ----
 .DS_Store
+
+# ---- Solana keypairs (JSON arrays of 64 numbers): never commit ----
+.keys/
+**/.keys/
+*id.json
+crosschain/stakd-oft/.anchor/
+crosschain/stakd-oft/target/

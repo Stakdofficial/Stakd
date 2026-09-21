@@ -9,6 +9,7 @@ import { formatUsd } from "@/lib/lighter";
 import { BasketShowcase } from "@/components/landing/BasketShowcase";
 import { Flywheel } from "@/components/landing/Flywheel";
 import { HeroCard } from "@/components/landing/HeroCard";
+import { SolanaRoutes } from "@/components/landing/SolanaRoutes";
 import { CountUp, Reveal } from "@/components/landing/motion";
 import { Ticker } from "@/components/landing/Ticker";
 
@@ -55,7 +56,7 @@ export default function Home() {
               </a>
             </Reveal>
             <Reveal delay={320} className="hero-trust">
-              {["Paired with ETH", "No ETH to launch", "Liquidity locked forever", "75% of profit burned"].map((t) => (
+              {["Paired with ETH", "No ETH to launch", "Liquidity locked forever", "75% of profit burned", "Buyable with SOL"].map((t) => (
                 <span key={t} className="trust-item">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                     <path d="m20 6-11 11-5-5" />
@@ -98,6 +99,24 @@ export default function Home() {
         </Reveal>
         <Reveal delay={120}>
           <BasketShowcase />
+        </Reveal>
+      </section>
+
+      <section className="section">
+        <Reveal className="section-head">
+          <span className="eyebrow">New · live on mainnet</span>
+          <h2 className="section-title">Buy with SOL. Supply burns.</h2>
+          <p className="lead center">
+            Coins launched on Stakd can be bought from Solana — pay in SOL and it arrives on Robinhood Chain in
+            seconds. You pay the same fee either way. What changes is where that fee goes.
+          </p>
+        </Reveal>
+        <Reveal delay={120}>
+          <SolanaRoutes />
+        </Reveal>
+        <Reveal delay={200} className="routes-note">
+          The contract routes the fee by who made the swap, so a cross-chain buy funds burns instead of the
+          portfolio. Enforced in code, not by policy.
         </Reveal>
       </section>
 

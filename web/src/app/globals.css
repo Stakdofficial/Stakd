@@ -965,7 +965,8 @@ body {
 }
 
 .chip-a { top: 0; left: 4%; animation-delay: -1s, 0.9s; }
-.chip-b { top: 46%; right: -12px; animation-delay: -2.5s, 1.1s; }
+/* sits clear of the split bar inside the card, which it used to cover at ~46% */
+.chip-b { top: 30%; right: -30px; animation-delay: -2.5s, 1.1s; }
 .chip-c { bottom: 0; right: 6%; animation-delay: -3.5s, 1.3s; }
 
 @keyframes fade-up {
@@ -1188,6 +1189,110 @@ body {
   background: linear-gradient(135deg, var(--blue-100), #e0f2fe);
 }
 
+/* the two routes into a coin: same fee, different destination */
+.routes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+
+.route {
+  padding: 26px 26px 24px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: 0 18px 50px rgba(15, 39, 68, 0.07);
+}
+
+.route-sol {
+  background: linear-gradient(170deg, rgba(153, 69, 255, 0.07), rgba(20, 241, 149, 0.05) 60%, var(--card));
+  border-color: rgba(153, 69, 255, 0.28);
+}
+
+.route-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.route-top strong {
+  font-size: 21px;
+  letter-spacing: -0.02em;
+}
+
+.route-chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--blue-100);
+  color: var(--blue-600);
+}
+
+.chip-sol {
+  background: linear-gradient(90deg, rgba(153, 69, 255, 0.18), rgba(20, 241, 149, 0.18));
+  color: #7c3aed;
+}
+
+.route-fee {
+  margin: 18px 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.route-dest {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  margin-top: 12px;
+}
+
+.route-dest strong {
+  display: block;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.route-dest span {
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.route-emoji {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.dest-blue {
+  background: rgba(59, 130, 246, 0.09);
+  border: 1px solid rgba(59, 130, 246, 0.24);
+}
+
+.dest-orange {
+  background: rgba(251, 146, 60, 0.1);
+  border: 1px solid rgba(251, 146, 60, 0.3);
+}
+
+.route-dest.soft {
+  opacity: 0.78;
+}
+
+.routes-note {
+  margin: 26px auto 0;
+  max-width: 660px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 15px;
+}
+
 .showcase-tabs {
   display: flex;
   gap: 6px;
@@ -1403,6 +1508,9 @@ body {
   .stat-band {
     grid-template-columns: 1fr 1fr;
     row-gap: 32px;
+  }
+  .routes {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1915,6 +2023,21 @@ body,
 .card,
 .hero-card {
   transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+/* the Solana route card reads as tinted glass on dark, and its chip needs a light ink */
+:root[data-theme="dark"] .route-sol {
+  background: linear-gradient(170deg, rgba(153, 69, 255, 0.16), rgba(20, 241, 149, 0.07) 60%, var(--card));
+  border-color: rgba(153, 69, 255, 0.4);
+}
+
+:root[data-theme="dark"] .chip-sol {
+  background: linear-gradient(90deg, rgba(153, 69, 255, 0.34), rgba(20, 241, 149, 0.28));
+  color: #e9d5ff;
+}
+
+:root[data-theme="dark"] .route {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
 }
 
 /* ------------------------------------------------------------------ whitepaper print / PDF */

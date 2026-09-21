@@ -28,6 +28,7 @@ class Config:
     params: Params
     min_margin_eth: float  # don't deposit smaller amounts (Lighter needs >= $10 orders to be useful)
     min_fee_eth: float  # collect hook fees once a coin has this much pending
+    min_burn_eth: float  # buy back and burn once a coin has this much burn fuel waiting
     min_claim_eth: float  # pay out creator / platform shares once this much is owed
     max_slippage: float  # Lighter market orders
     swap_slippage: float  # Uniswap v4 swaps
@@ -71,6 +72,8 @@ def load() -> Config:
         ),
         min_margin_eth=float(_get("MIN_MARGIN_ETH", "0.005")),
         min_fee_eth=float(_get("MIN_FEE_ETH", "0.0005")),
+        # Low on purpose: a burn is the visible half of a cross-chain buy, so it should not wait for a round number.
+        min_burn_eth=float(_get("MIN_BURN_ETH", "0.00001")),
         min_claim_eth=float(_get("MIN_CLAIM_ETH", "0.001")),
         max_slippage=float(_get("MAX_SLIPPAGE", "0.005")),
         swap_slippage=float(_get("SWAP_SLIPPAGE", "0.02")),
