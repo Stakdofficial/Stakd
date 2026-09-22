@@ -12,3 +12,11 @@ export function profileLink(raw: string | undefined, kind: "x" | "telegram" | "w
   if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/[^\s]*)?$/i.test(v)) return `https://${v}`;
   return undefined;
 }
+
+/** The @handle behind a coin's X link (`x.com/name`, `https://twitter.com/name`, `@name`), or nothing. */
+export function xHandle(raw: string | undefined): string | undefined {
+  const link = profileLink(raw, "x");
+  const m = link?.match(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})(?:[/?#]|$)/i);
+  if (!m || /^(home|intent|search|i|share)$/i.test(m[1])) return undefined;
+  return m[1];
+}

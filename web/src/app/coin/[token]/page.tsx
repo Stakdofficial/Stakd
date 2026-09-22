@@ -11,7 +11,7 @@ import { LiveChart } from "@/components/LiveChart";
 import { BuyFromSolana } from "@/components/BuyFromSolana";
 import { CoinActivity } from "@/components/CoinActivity";
 import { useQuery } from "@tanstack/react-query";
-import { profileLink } from "@/lib/links";
+import { profileLink, xHandle } from "@/lib/links";
 import { factoryAbi, hookAbi, routerAbi, tokenAbi, treasuryAbi } from "@/lib/abis";
 import { chain, erc20Abi, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, orderFactoryFor, POOL_MANAGER, poolManagerAbi, quoterAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
 import { useCoinFactory, useEthPrice, useLighterAccount, useMarkets, type Leg } from "@/lib/hooks";
@@ -116,7 +116,7 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
   const profile = meta.data as { image: string; description: string; telegram: string; x: string; website: string } | undefined;
   const socials = [
     { label: "Telegram", href: profileLink(profile?.telegram, "telegram") },
-    { label: "X", href: profileLink(profile?.x, "x") },
+    { label: xHandle(profile?.x) ? `@${xHandle(profile?.x)}` : "X", href: profileLink(profile?.x, "x") },
     { label: "Website", href: profileLink(profile?.website, "website") },
   ].filter((l): l is { label: string; href: string } => !!l.href);
   const isCreator = !!address && !!coin.data?.creator && address.toLowerCase() === coin.data.creator.toLowerCase();
@@ -155,7 +155,7 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
               {formatUsd(price, price < 0.01 ? 8 : 4)}
             </div>
             <div className="muted small">market cap {formatUsd(price * Number(formatUnits(supply, TOKEN_DECIMALS)), 0)}</div>
-            <ShareButtons token={token} name={name} symbol={symbol} />
+            <ShareButtons token={token} name={name} symbol={symbol} handle={xHandle(profile?.x)} />
           </div>
         </div>
 
@@ -246,9 +246,10 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
   );
 }
 
-function ShareButtons({ token, name, symbol }: { token: Address; name: string; symbol: string }) {
+function ShareButtons({ token, name, symbol, handle }: { token: Address; name: string; symbol: string; handle?: string }) {
   const url = `https://www.stakd.tech/coin/${token}`;
-  const text = `${name} ($${symbol}) is a coin with its own leveraged portfolio on @StakdOfficial`;
+  // Tag the coin's own X account when it has one, so every share credits the creator.
+  const text = `${name} ($${symbol})${handle ? ` by @${handle}` : ""} is a coin with its own leveraged portfolio on @StakdOfficial`;
   const intent = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
   return (
     <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
