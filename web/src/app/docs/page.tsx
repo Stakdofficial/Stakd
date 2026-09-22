@@ -105,7 +105,7 @@ export default function Docs() {
               <b>Fixed supply:</b> 1,000,000,000 tokens. Nobody can mint more.
             </li>
             <li>
-              <b>Locked liquidity:</b> the whole supply goes into the pool from a ~$5K starting market cap. The liquidity is owned
+              <b>Locked liquidity:</b> the whole supply goes into the pool from a ~$2.5K starting market cap. The liquidity is owned
               by the factory contract, which has no way to remove it.
             </li>
             <li>

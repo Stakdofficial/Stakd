@@ -154,7 +154,7 @@ export default function Whitepaper() {
               Creates a Uniswap v4 pool pairing the coin with native ETH and attaches the Stakd hook.
             </li>
             <li>
-              Adds the <b>entire supply</b> as single-sided liquidity starting from a market cap of roughly $5,000.
+              Adds the <b>entire supply</b> as single-sided liquidity starting from a market cap of roughly $2,500 (about 0.9 ETH).
             </li>
           </ol>
           <p>

@@ -278,7 +278,7 @@ const FAQ: [string, string][] = [
   ],
   [
     "Do I need ETH to launch a coin?",
-    "No. The whole 1B supply goes into a Uniswap v4 pool as single-sided liquidity starting at a ~$5k market cap, locked forever. Buyers' ETH fills the pool as they trade. You only pay gas.",
+    "No. The whole 1B supply goes into a Uniswap v4 pool as single-sided liquidity starting at a ~$2.5k market cap (about 0.9 ETH), locked forever. Buyers' ETH fills the pool as they trade. You only pay gas.",
   ],
   [
     "Why can stock legs sit idle?",
