@@ -9,6 +9,7 @@ import { formatUsd } from "@/lib/lighter";
 import { BasketShowcase } from "@/components/landing/BasketShowcase";
 import { Flywheel } from "@/components/landing/Flywheel";
 import { HeroCard } from "@/components/landing/HeroCard";
+import { PlatformStats } from "@/components/landing/PlatformStats";
 import { SolanaRoutes } from "@/components/landing/SolanaRoutes";
 import { CountUp, Reveal } from "@/components/landing/motion";
 import { Ticker } from "@/components/landing/Ticker";
@@ -73,6 +74,8 @@ export default function Home() {
       <section className="bleed ticker-band">
         <Ticker />
       </section>
+
+      <PlatformStats />
 
       <section className="section" id="hook-v3">
         <Reveal className="section-head">
