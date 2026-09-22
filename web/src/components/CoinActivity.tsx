@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { formatUnits, parseAbiItem, type Address, type Hex } from "viem";
-import { usePublicClient } from "wagmi";
+import { usePublicClient, useReadContract } from "wagmi";
+import { treasuryAbi } from "@/lib/abis";
 import { useQuery } from "@tanstack/react-query";
 import { ETH_DECIMALS, explorerAddress, explorerTx, POOL_MANAGER, TOKEN_DECIMALS } from "@/lib/config";
 import { formatUsd } from "@/lib/lighter";
@@ -160,6 +161,13 @@ function Trades({ poolId, symbol, usdPerEth }: { poolId: Hex; symbol: string; us
 
 function Burns({ treasury, symbol, usdPerEth }: { treasury: Address; symbol: string; usdPerEth: number }) {
   const client = usePublicClient();
+  // The list shows the latest burns; the headline is the treasury's own all-time counter, so it matches the stats.
+  const allTime = useReadContract({
+    address: treasury,
+    abi: treasuryAbi,
+    functionName: "totalTokensBurned",
+    query: { enabled: !!treasury, refetchInterval: 20_000 },
+  });
   const burns = useQuery({
     queryKey: ["burns", treasury],
     enabled: !!client && !!treasury,
@@ -196,13 +204,20 @@ function Burns({ treasury, symbol, usdPerEth }: { treasury: Address; symbol: str
       </div>
     );
 
-  const total = burns.data.reduce((sum, b) => sum + b.tokens, 0);
+  const total = allTime.data !== undefined ? Number(formatUnits(allTime.data, TOKEN_DECIMALS)) : undefined;
 
   return (
     <div className="table-wrap">
       <div className="small" style={{ marginBottom: 8 }}>
-        <strong>{total.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 2 })}</strong> {symbol} burned in
-        the last {burns.data.length} {burns.data.length === 1 ? "burn" : "burns"} — gone for good, supply only goes down.
+        {total !== undefined && (
+          <>
+            <strong>{total.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 2 })}</strong> {symbol} burned in
+            total — gone for good, supply only goes down.{" "}
+          </>
+        )}
+        <span className="muted">
+          Latest {burns.data.length} {burns.data.length === 1 ? "burn" : "burns"} below.
+        </span>
       </div>
       <table className="table">
         <thead>
