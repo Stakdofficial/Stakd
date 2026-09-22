@@ -22,11 +22,33 @@ function encode(bitmap: ImageBitmap, size: number, type: string, quality: number
 }
 
 /**
+ * Decode any image the browser can display. `createImageBitmap` rejects some formats a page can still show (SVG in
+ * particular), so fall back to loading it through an <img> first.
+ */
+async function decode(file: File): Promise<ImageBitmap> {
+  try {
+    return await createImageBitmap(file);
+  } catch {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return await createImageBitmap(img, { resizeWidth: 256, resizeHeight: 256, resizeQuality: "high" });
+    } catch {
+      throw new Error("That image format can't be used. Try a PNG, JPG or WebP.");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+}
+
+/**
  * Shrink a picked image until its data URI fits on-chain.
  * WebP where the browser supports it, JPEG otherwise; a square crop either way.
  */
 async function toDataUri(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await decode(file);
   try {
     const webpWorks = encode(bitmap, 8, "image/webp", 0.5).startsWith("data:image/webp");
     const type = webpWorks ? "image/webp" : "image/jpeg";
@@ -40,6 +62,15 @@ async function toDataUri(file: File): Promise<string> {
   } finally {
     bitmap.close();
   }
+}
+
+/** A link that points at an image, as opposed to a profile or website link. */
+const IMAGE_LINK = /^(data:image\/|ipfs:\/\/|https?:\/\/\S+\.(png|jpe?g|gif|webp|avif|svg)(\?\S*)?$)/i;
+
+/** True while the user is typing somewhere else on the page: their paste belongs to that field, not the logo. */
+function isEditable(el: EventTarget | null) {
+  if (!(el instanceof HTMLElement)) return false;
+  return el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT";
 }
 
 export function ImagePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -69,7 +100,33 @@ export function ImagePicker({ value, onChange }: { value: string; onChange: (v: 
     [onChange],
   );
 
-  // Cmd/Ctrl+V anywhere on the page drops an image straight in.
+  // A pasted image link is downloaded and stored like an upload, so the logo can't break if that host goes away.
+  // Hosts that refuse to share the file keep the link as-is; the preview then reports if it can't be shown.
+  const acceptLink = useCallback(
+    async (link: string) => {
+      setError(null);
+      if (/^https?:\/\//i.test(link)) {
+        setBusy(true);
+        try {
+          const res = await fetch(link);
+          const blob = await res.blob();
+          if (res.ok && blob.type.startsWith("image/")) {
+            await accept(new File([blob], "logo", { type: blob.type }));
+            return;
+          }
+        } catch {
+          // fall through to keeping the link
+        } finally {
+          setBusy(false);
+        }
+      }
+      onChange(link);
+    },
+    [accept, onChange],
+  );
+
+  // Cmd/Ctrl+V drops an image straight in, unless the user is typing in another field (the X, website or
+  // description boxes), where the paste belongs to that field.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       const data = e.clipboardData;
@@ -80,16 +137,16 @@ export function ImagePicker({ value, onChange }: { value: string; onChange: (v: 
         void accept(file);
         return;
       }
+      if (isEditable(e.target)) return;
       const text = data.getData("text").trim();
-      if (/^(https?:\/\/|ipfs:\/\/|data:image\/)/i.test(text)) {
+      if (IMAGE_LINK.test(text)) {
         e.preventDefault();
-        setError(null);
-        onChange(text);
+        void acceptLink(text);
       }
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [accept, onChange]);
+  }, [accept, acceptLink]);
 
   return (
     <div>
@@ -116,7 +173,15 @@ export function ImagePicker({ value, onChange }: { value: string; onChange: (v: 
       >
         {value ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={value} alt="" className="image-drop-preview" />
+          <img
+            src={value}
+            alt=""
+            className="image-drop-preview"
+            onError={() => {
+              onChange("");
+              setError("That image couldn't be loaded. Upload the file itself, or paste a different image.");
+            }}
+          />
         ) : (
           <div className="image-drop-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
