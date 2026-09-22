@@ -13,6 +13,10 @@ export type LighterPosition = {
   value: number;
   unrealizedPnl: number;
   entryPrice: number;
+  /** 0 when the account is far from liquidation (Lighter reports no price then). */
+  liquidationPrice?: number;
+  /** Funding paid out over the position's life; negative means funding was received. */
+  fundingPaid?: number;
 };
 
 export type LighterAccount = {
@@ -20,6 +24,10 @@ export type LighterAccount = {
   equity: number;
   available: number;
   positions: LighterPosition[];
+  /** The L1 wallet that owns the account on Lighter's Robinhood Chain exchange. */
+  owner?: string;
+  initialMargin?: number;
+  maintenanceMargin?: number;
 };
 
 // Lighter lists equities, ETFs and indices alongside crypto; tag the common ones so the picker can group them.

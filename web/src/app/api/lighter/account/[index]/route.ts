@@ -12,6 +12,8 @@ type RawPosition = {
   position_value: string;
   unrealized_pnl: string;
   avg_entry_price: string;
+  liquidation_price: string;
+  total_funding_paid_out: string;
 };
 
 export async function GET(_req: Request, { params }: { params: Promise<{ index: string }> }) {
@@ -27,6 +29,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ index: 
     index: Number(index),
     equity: Number(acct.total_asset_value),
     available: Number(acct.available_balance),
+    owner: acct.l1_address,
+    initialMargin: Number(acct.cross_initial_margin_requirement),
+    maintenanceMargin: Number(acct.cross_maintenance_margin_requirement),
     positions: (acct.positions as RawPosition[])
       .filter((p) => Number(p.position) !== 0)
       .map((p) => ({
@@ -36,6 +41,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ index: 
         value: Number(p.position_value),
         unrealizedPnl: Number(p.unrealized_pnl),
         entryPrice: Number(p.avg_entry_price),
+        liquidationPrice: Number(p.liquidation_price),
+        fundingPaid: Number(p.total_funding_paid_out),
       })),
   };
   return NextResponse.json(account);

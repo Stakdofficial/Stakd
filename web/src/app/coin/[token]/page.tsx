@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import { formatUnits, isAddress, parseUnits, type Address } from "viem";
 import { useAccount, useBalance, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { avgLeverage, Basket, legLabel } from "@/components/Basket";
@@ -215,7 +216,10 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
           {accountSet && (
             <div className="muted small">
               Lighter account #{accountIndex.toString()}
-              {lighter.data && ` · equity ${formatUsd(lighter.data.equity)}`}
+              {lighter.data && ` · equity ${formatUsd(lighter.data.equity)}`} ·{" "}
+              <Link href={`/lighter/${accountIndex.toString()}?coin=${encodeURIComponent(symbol)}`} style={{ color: "var(--blue-600)", fontWeight: 600 }}>
+                View positions on Lighter →
+              </Link>
             </div>
           )}
         </div>
