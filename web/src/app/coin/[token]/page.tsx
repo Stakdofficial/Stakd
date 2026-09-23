@@ -13,7 +13,7 @@ import { CoinActivity } from "@/components/CoinActivity";
 import { useQuery } from "@tanstack/react-query";
 import { profileLink, xHandle } from "@/lib/links";
 import { factoryAbi, hookAbi, routerAbi, tokenAbi, treasuryAbi } from "@/lib/abis";
-import { chain, erc20Abi, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, orderFactoryFor, POOL_MANAGER, poolManagerAbi, quoterAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
+import { burnerFor, chain, erc20Abi, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, orderFactoryFor, POOL_MANAGER, poolManagerAbi, quoterAbi, stakdBurnerAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
 import { useCoinFactory, useEthPrice, useLighterAccount, useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 import { decodePoolState, ethPerToken, POOL_STATE_SLOTS, poolStateSlot, sqrtPriceFromSlots } from "@/lib/pool";
@@ -74,6 +74,14 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
       { address: POOL_MANAGER, abi: poolManagerAbi, functionName: "extsload", args: [poolId ? poolStateSlot(poolId) : "0x", POOL_STATE_SLOTS] },
     ],
     query: { enabled: !!treasury && !!hookAddress.data && !!poolId, refetchInterval: 10_000 },
+  });
+
+  // $STAKD is burned by the hook's burner as well as by its own treasury, so its total is the two added up.
+  const burnerBurned = useReadContract({
+    address: burnerFor(token),
+    abi: stakdBurnerAbi,
+    functionName: "totalBurned",
+    query: { enabled: !!burnerFor(token), retry: false, refetchInterval: 20_000 },
   });
 
   // Hook v3 treasuries track the creator's 1%; older ones have no such counter, so a failed read means none.
@@ -233,7 +241,7 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
           <Stat k="Margin sent to Lighter" v={ethStr(bridged) + usd(bridged)} />
           <Stat k="Waiting for Lighter" v={ethStr(reserve) + usd(reserve)} />
           <Stat k="Bought back" v={ethStr(bought) + usd(bought)} />
-          <Stat k="Burned" v={`${compact(burned)} ${symbol}`} />
+          <Stat k="Burned" v={`${compact((burned ?? 0n) + (burnerBurned.data ?? 0n))} ${symbol}`} />
           <Stat k="Fees waiting to collect" v={ethStr(pendingFees) + usd(pendingFees)} />
           {creatorPaid.data !== undefined && <Stat k="Earned by creator (1%)" v={ethStr(creatorPaid.data) + usd(creatorPaid.data)} />}
         </div>

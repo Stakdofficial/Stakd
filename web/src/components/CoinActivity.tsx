@@ -5,7 +5,15 @@ import { formatUnits, parseAbiItem, type Address, type Hex } from "viem";
 import { usePublicClient, useReadContract } from "wagmi";
 import { treasuryAbi } from "@/lib/abis";
 import { useQuery } from "@tanstack/react-query";
-import { ETH_DECIMALS, explorerAddress, explorerTx, POOL_MANAGER, TOKEN_DECIMALS } from "@/lib/config";
+import {
+  burnerFor,
+  ETH_DECIMALS,
+  explorerAddress,
+  explorerTx,
+  POOL_MANAGER,
+  stakdBurnerAbi,
+  TOKEN_DECIMALS,
+} from "@/lib/config";
 import { formatUsd } from "@/lib/lighter";
 
 /**
@@ -22,6 +30,10 @@ const swapEvent = parseAbiItem(
 // buying the coin back and destroying it.
 const burnEvent = parseAbiItem("event BuybackAndBurn(uint256 ethSpent, uint256 tokensBurned)");
 
+// $STAKD is also burned by the hook's burner, which every other coin's volatility fee pays into. Same shape,
+// different contract, so the burns list has to read both.
+const burnerBurnEvent = parseAbiItem("event Burned(uint256 ethSpent, uint256 tokensBurned)");
+
 // Robinhood Chain makes ~10 blocks a second. Look back ~5.5h first, then ~28h if the coin is quiet.
 const WINDOWS = [200_000n, 1_000_000n];
 const MAX_TRADES = 25;
@@ -31,7 +43,7 @@ const PINKLOCK = "0xbe0b139abc90723af76a89d3051f60ba1b64c8d9";
 const PLATFORM = "0x2dd3f57b811ab39832f202af27367b1b04fe27b2";
 
 type Trade = { hash: Hex; side: "buy" | "sell"; eth: number; tokens: number; trader: Address; time: number };
-type Burn = { hash: Hex; eth: number; tokens: number; time: number };
+type Burn = { hash: Hex; eth: number; tokens: number; time: number; kind: "coin" | "volatility" };
 type Holder = { address: string; percent: number; isContract: boolean; isLocked: boolean };
 
 export function CoinActivity({
@@ -69,7 +81,7 @@ export function CoinActivity({
       {tab === "trades" ? (
         <Trades poolId={poolId} symbol={symbol} usdPerEth={usdPerEth} />
       ) : tab === "burns" ? (
-        <Burns treasury={treasury} symbol={symbol} usdPerEth={usdPerEth} />
+        <Burns treasury={treasury} token={token} symbol={symbol} usdPerEth={usdPerEth} />
       ) : (
         <Holders token={token} creator={creator} treasury={treasury} />
       )}
@@ -159,25 +171,53 @@ function Trades({ poolId, symbol, usdPerEth }: { poolId: Hex; symbol: string; us
   );
 }
 
-function Burns({ treasury, symbol, usdPerEth }: { treasury: Address; symbol: string; usdPerEth: number }) {
+function Burns({
+  treasury,
+  token,
+  symbol,
+  usdPerEth,
+}: {
+  treasury: Address;
+  token: Address;
+  symbol: string;
+  usdPerEth: number;
+}) {
   const client = usePublicClient();
-  // The list shows the latest burns; the headline is the treasury's own all-time counter, so it matches the stats.
+  const burner = burnerFor(token);
+  // The list shows the latest burns; the headline is the all-time counters, so it matches the stats.
   const allTime = useReadContract({
     address: treasury,
     abi: treasuryAbi,
     functionName: "totalTokensBurned",
     query: { enabled: !!treasury, refetchInterval: 20_000 },
   });
+  const burnerAllTime = useReadContract({
+    address: burner,
+    abi: stakdBurnerAbi,
+    functionName: "totalBurned",
+    query: { enabled: !!burner, refetchInterval: 20_000 },
+  });
   const burns = useQuery({
-    queryKey: ["burns", treasury],
+    queryKey: ["burns", treasury, burner ?? "no-burner"],
     enabled: !!client && !!treasury,
     refetchInterval: 30_000,
     queryFn: async (): Promise<Burn[]> => {
       if (!client) return [];
       const head = await client.getBlockNumber();
-      let logs: Awaited<ReturnType<typeof client.getLogs<typeof burnEvent>>> = [];
+      type AnyBurnLog = { transactionHash: Hex; blockNumber: bigint; args: { ethSpent?: bigint; tokensBurned?: bigint }; kind: Burn["kind"] };
+      let logs: AnyBurnLog[] = [];
       for (const w of WINDOWS) {
-        logs = await client.getLogs({ address: treasury, event: burnEvent, fromBlock: head > w ? head - w : 0n, toBlock: head });
+        const from = head > w ? head - w : 0n;
+        const [own, viaBurner] = await Promise.all([
+          client.getLogs({ address: treasury, event: burnEvent, fromBlock: from, toBlock: head }),
+          burner
+            ? client.getLogs({ address: burner, event: burnerBurnEvent, fromBlock: from, toBlock: head })
+            : Promise.resolve([]),
+        ]);
+        logs = [
+          ...own.map((l) => ({ ...l, kind: "coin" as const })),
+          ...viaBurner.map((l) => ({ ...l, kind: "volatility" as const })),
+        ].sort((a, b) => Number(a.blockNumber - b.blockNumber));
         if (logs.length) break;
       }
       const recent = logs.slice(-MAX_TRADES).reverse();
@@ -190,6 +230,7 @@ function Burns({ treasury, symbol, usdPerEth }: { treasury: Address; symbol: str
         eth: Number(formatUnits(l.args.ethSpent ?? 0n, ETH_DECIMALS)),
         tokens: Number(formatUnits(l.args.tokensBurned ?? 0n, TOKEN_DECIMALS)),
         time: times.get(l.blockNumber) ?? 0,
+        kind: l.kind,
       }));
     },
   });
@@ -199,12 +240,15 @@ function Burns({ treasury, symbol, usdPerEth }: { treasury: Address; symbol: str
   if (!burns.data?.length)
     return (
       <div className="muted small">
-        No burns yet. Burns happen when the portfolio takes a profit, or when someone buys this coin from another
-        chain — those fees buy the coin back and destroy it.
+        No burns yet. Burns happen when the portfolio takes a profit, when someone buys this coin from another
+        chain, or when a coin gets volatile — those fees buy the coin back and destroy it.
       </div>
     );
 
-  const total = allTime.data !== undefined ? Number(formatUnits(allTime.data, TOKEN_DECIMALS)) : undefined;
+  const total =
+    allTime.data !== undefined
+      ? Number(formatUnits(allTime.data + (burnerAllTime.data ?? 0n), TOKEN_DECIMALS))
+      : undefined;
 
   return (
     <div className="table-wrap">
@@ -233,7 +277,7 @@ function Burns({ treasury, symbol, usdPerEth }: { treasury: Address; symbol: str
           {burns.data.map((b) => (
             <tr key={b.hash + b.tokens}>
               <td className="pos">
-                <strong>Burn</strong>
+                <strong>{b.kind === "volatility" ? "Volatility burn" : "Burn"}</strong>
               </td>
               <td>{usdPerEth ? formatUsd(b.eth * usdPerEth) : "—"}</td>
               <td className="mono">{b.eth.toLocaleString("en-US", { maximumFractionDigits: 6 })}</td>

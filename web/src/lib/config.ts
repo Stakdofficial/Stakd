@@ -189,6 +189,27 @@ export const orderFactoryAbi = [
   },
 ] as const;
 
+/**
+ * Official $STAKD is burned from two places. Its own treasury burns it like any other coin, and since Hook v4 the
+ * StakdBurner burns it too: half of every other coin's volatility fee is sent there, spent on $STAKD and destroyed.
+ * The burner is not a treasury, so anything counting $STAKD burns has to ask it as well.
+ */
+export const STAKD_TOKEN = (process.env.NEXT_PUBLIC_STAKD_TOKEN ??
+  "0x2854Cf9f6C3DF1eEdCa72CD141e282AC167d1E6A") as Address;
+export const STAKD_BURNER = (process.env.NEXT_PUBLIC_STAKD_BURNER ??
+  "0xe61BF093B0A6ca647c23C9B59e94Fa495b8cC1E5") as Address;
+
+/** The burner that destroys `token`, when that token is the one $STAKD burner burns. */
+export function burnerFor(token: Address | undefined): Address | undefined {
+  if (!token || !STAKD_BURNER || !STAKD_TOKEN) return undefined;
+  return token.toLowerCase() === STAKD_TOKEN.toLowerCase() ? STAKD_BURNER : undefined;
+}
+
+export const stakdBurnerAbi = [
+  { type: "function", name: "totalBurned", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "totalEthSpent", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+] as const;
+
 export const METADATA = (process.env.NEXT_PUBLIC_METADATA_ADDRESS ?? "0xa55D5E6E5e80C22Ad09e7743E95D2152C09d800B") as Address;
 
 /**

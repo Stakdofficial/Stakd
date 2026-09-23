@@ -1,10 +1,10 @@
 "use client";
 
 import { formatUnits, parseAbiItem, type Address } from "viem";
-import { usePublicClient } from "wagmi";
+import { usePublicClient, useReadContracts } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { ETH_DECIMALS, explorerTx, TOKEN_DECIMALS } from "@/lib/config";
+import { ETH_DECIMALS, explorerTx, TOKEN_DECIMALS, STAKD_BURNER, STAKD_TOKEN, stakdBurnerAbi } from "@/lib/config";
 import { useCoins, useEthPrice, type CoinSummary } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 
@@ -14,6 +14,9 @@ import { formatUsd } from "@/lib/lighter";
  */
 
 const burnEvent = parseAbiItem("event BuybackAndBurn(uint256 ethSpent, uint256 tokensBurned)");
+// The hook's burner destroys official $STAKD out of every other coin's volatility fee. It is not a treasury, so
+// its burns have to be read from it directly and mapped onto $STAKD's own row.
+const burnerBurnEvent = parseAbiItem("event Burned(uint256 ethSpent, uint256 tokensBurned)");
 
 // Robinhood Chain makes ~10 blocks a second; the RPC serves ~1M blocks (~28h) per request.
 const CHUNK = 1_000_000n;
@@ -29,8 +32,19 @@ export default function BurnsPage() {
   const list = coins.coins ?? [];
   const treasuries = list.map((c: CoinSummary) => c.treasury);
 
+  const burnerTotals = useReadContracts({
+    allowFailure: false,
+    contracts: [
+      { address: STAKD_BURNER, abi: stakdBurnerAbi, functionName: "totalBurned" },
+      { address: STAKD_BURNER, abi: stakdBurnerAbi, functionName: "totalEthSpent" },
+    ],
+    query: { enabled: !!STAKD_BURNER, refetchInterval: 60_000 },
+  });
+
+  const stakdTreasury = list.find((c: CoinSummary) => c.token.toLowerCase() === STAKD_TOKEN.toLowerCase())?.treasury;
+
   const burns = useQuery({
-    queryKey: ["burns", treasuries.join(",")],
+    queryKey: ["burns", treasuries.join(","), stakdTreasury ?? "no-stakd"],
     enabled: !!client && treasuries.length > 0,
     refetchInterval: 60_000,
     queryFn: async (): Promise<Burn[]> => {
@@ -41,11 +55,28 @@ export default function BurnsPage() {
         const toBlock = head - i * CHUNK;
         if (toBlock <= 0n) break;
         const fromBlock = toBlock > CHUNK ? toBlock - CHUNK : 0n;
-        const logs = await client.getLogs({ address: treasuries, event: burnEvent, fromBlock, toBlock });
+        const [logs, burnerLogs] = await Promise.all([
+          client.getLogs({ address: treasuries, event: burnEvent, fromBlock, toBlock }),
+          STAKD_BURNER
+            ? client.getLogs({ address: STAKD_BURNER, event: burnerBurnEvent, fromBlock, toBlock })
+            : Promise.resolve([]),
+        ]);
         for (const l of logs) {
           out.push({
             key: `${l.transactionHash}-${l.logIndex}`,
             treasury: l.address as Address,
+            eth: Number(formatUnits(l.args.ethSpent ?? 0n, ETH_DECIMALS)),
+            tokens: Number(formatUnits(l.args.tokensBurned ?? 0n, TOKEN_DECIMALS)),
+            block: l.blockNumber,
+            hash: l.transactionHash,
+          });
+        }
+        for (const l of burnerLogs) {
+          // Credit it to $STAKD's own treasury row, which is the coin whose supply actually went down.
+          if (!stakdTreasury) continue;
+          out.push({
+            key: `${l.transactionHash}-${l.logIndex}`,
+            treasury: stakdTreasury,
             eth: Number(formatUnits(l.args.ethSpent ?? 0n, ETH_DECIMALS)),
             tokens: Number(formatUnits(l.args.tokensBurned ?? 0n, TOKEN_DECIMALS)),
             block: l.blockNumber,
@@ -64,7 +95,15 @@ export default function BurnsPage() {
   const coinsWithBurns = new Set(rows.map((b) => b.treasury.toLowerCase())).size;
   // Supply burned is per coin, so totals are shown per coin rather than added together.
   const perCoin = list
-    .map((c: CoinSummary) => ({ coin: c, burned: Number(formatUnits(c.totalTokensBurned, TOKEN_DECIMALS)), eth: Number(formatUnits(c.totalBuybackEth, ETH_DECIMALS)) }))
+    .map((c: CoinSummary) => {
+      const viaBurner = c.token.toLowerCase() === STAKD_TOKEN.toLowerCase() ? (burnerTotals.data?.[0] ?? 0n) : 0n;
+      const viaBurnerEth = c.token.toLowerCase() === STAKD_TOKEN.toLowerCase() ? (burnerTotals.data?.[1] ?? 0n) : 0n;
+      return {
+        coin: c,
+        burned: Number(formatUnits(c.totalTokensBurned + viaBurner, TOKEN_DECIMALS)),
+        eth: Number(formatUnits(c.totalBuybackEth + viaBurnerEth, ETH_DECIMALS)),
+      };
+    })
     .filter((x: { burned: number }) => x.burned > 0)
     .sort((a: { eth: number }, b: { eth: number }) => b.eth - a.eth);
 
