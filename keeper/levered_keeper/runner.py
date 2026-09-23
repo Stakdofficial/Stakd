@@ -46,6 +46,7 @@ class Keeper:
         self.state = State.load(cfg.state_path)
         self.alerts = Alerter(cfg.alert_webhook_url)
         self._no_crosschain_bucket = False  # set once the hook proves it is the pre-cross-chain one
+        self._no_burner = False  # set once the factory proves it predates the $STAKD burner
         self._missing_buckets: set[str] = set()  # fee buckets the hook proved it predates (e.g. "Defend")
 
     def save(self) -> None:
@@ -78,6 +79,7 @@ class Keeper:
                 self.alerts.send(f"coin:{key}", f"coin {coin['token']} failed: {e!r}"[:500])
             finally:
                 self.save()
+        self.burn_stakd()
 
     async def process_coin(self, cs: CoinState, markets, pool_id: bytes) -> None:
         treasury = self.chain.treasury(cs.treasury)
@@ -86,6 +88,7 @@ class Keeper:
         self.collect_crosschain_fees(pool_id)
         self.collect_defend_fees(pool_id)
         self.collect_creator_fees(pool_id)
+        self.collect_volatility_fees(pool_id)
         self.claim_fee_shares(treasury)
         self.burn_pending(cs, treasury)
         # Margin stays in the treasury until the coin has a Lighter sub-account to hand it to.
@@ -185,6 +188,11 @@ class Keeper:
         """Sweep the creator's 1% into the treasury, where `claim_fee_shares` pays it out to the creator."""
         self._sweep_bucket(pool_id, "Creator", self.cfg.min_fee_eth, "→ creator")
 
+    def collect_volatility_fees(self, pool_id: bytes) -> None:
+        """Sweep the volatility surcharge. The treasury splits the coin's share of it in half: half becomes burn
+        fuel for this coin, half is sent to the burner to buy and burn official $STAKD."""
+        self._sweep_bucket(pool_id, "Volatility", self.cfg.min_burn_eth, "→ burns the coin and $STAKD")
+
     def _sweep_bucket(self, pool_id: bytes, bucket: str, min_eth: float, note: str) -> None:
         """Collect one of the hook's newer fee buckets (`pending<bucket>Fees` / `collect<bucket>Fees`)."""
         if bucket in self._missing_buckets:
@@ -201,6 +209,33 @@ class Keeper:
                 getattr(self.chain.hook.functions, f"collect{bucket}Fees")(pool_id),
                 f"collect{bucket}Fees {to_eth(pending):.6f} ETH {note}",
             )
+
+    def burn_stakd(self) -> None:
+        """Spend whatever the factory's burner holds on official $STAKD and burn it. Every coin's volatility fee
+        feeds the same burner, so this runs once a tick rather than per coin."""
+        if self._no_burner:
+            return
+        try:
+            burner = self.chain.stakd_burner()
+        except Exception:
+            # Factories older than v4 have no burner; the ABI is shared, so only the call can tell them apart.
+            self._no_burner = True
+            log.info("factory has no $STAKD burner; skipping those burns")
+            return
+        if burner is None:
+            self._no_burner = True
+            log.info("factory has no $STAKD burner set; skipping those burns")
+            return
+        amount = self.chain.w3.eth.get_balance(burner.address)
+        if to_eth(amount) < self.cfg.min_burn_eth:
+            return
+        try:
+            expected = self.chain.quote_stakd_buy(burner, amount)
+        except Exception as e:
+            log.warning("could not quote the $STAKD buy, skipping this tick: %r", e)
+            return
+        min_tokens = int(expected * (1 - 2 * self.cfg.swap_slippage))
+        self.chain.send(burner.functions.burn(min_tokens), f"burn $STAKD ~{to_eth(amount):.6f} ETH")
 
     def burn_pending(self, cs: CoinState, treasury) -> None:
         """Burn whatever burn fuel is waiting. Profit withdrawals run their own burn when they land, but a

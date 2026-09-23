@@ -62,6 +62,8 @@ contract LeveredFactory is Ownable, IUnlockCallback {
     address public router;
     /// @notice Buys arriving through this contract pay the same fee, but the coin's share buys back and burns.
     address public crosschainRouter;
+    /// @notice Where the STAKD half of every volatility fee goes: a burner that buys $STAKD and destroys it.
+    address public stakdBurner;
 
     /// @notice Launch price as a tick of ETH-per-token (raw units).
     int24 public startTick;
@@ -93,6 +95,7 @@ contract LeveredFactory is Ownable, IUnlockCallback {
     );
     event PeripheralsSet(address hook, address router);
     event CrosschainRouterSet(address router);
+    event StakdBurnerSet(address burner);
     event KeeperSet(address indexed keeper, bool allowed);
     event MarginConfigSet(MarginConfig config);
     event MarginConfigProposed(MarginConfig config, uint256 eta);
@@ -275,6 +278,14 @@ contract LeveredFactory is Ownable, IUnlockCallback {
 
     /// @notice Set the cross-chain router: the one contract whose buys route a coin's fee share to buyback & burn
     ///         instead of its leveraged portfolio. Set once, then fixed forever, like the peripherals.
+    /// @notice Point the volatility fee's STAKD half at its burner. Set once, then fixed forever, like the router.
+    function setStakdBurner(address burner_) external onlyOwner {
+        if (stakdBurner != address(0)) revert AlreadySet();
+        if (burner_ == address(0)) revert BadPeripheral();
+        stakdBurner = burner_;
+        emit StakdBurnerSet(burner_);
+    }
+
     function setCrosschainRouter(address router_) external onlyOwner {
         if (crosschainRouter != address(0)) revert AlreadySet();
         if (router_ == address(0)) revert BadPeripheral();

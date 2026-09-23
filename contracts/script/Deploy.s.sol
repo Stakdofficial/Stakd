@@ -6,6 +6,8 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {LeveredFactory} from "../src/LeveredFactory.sol";
 import {LeveredHook} from "../src/LeveredHook.sol";
 import {LeveredRouter} from "../src/LeveredRouter.sol";
+import {StakdBurner} from "../src/StakdBurner.sol";
+import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import {MarginConfig, ILeveredFactory} from "../src/interfaces/ILevered.sol";
 import {HookMiner} from "./HookMiner.sol";
 
@@ -50,6 +52,19 @@ contract Deploy is Script {
         LeveredRouter router = new LeveredRouter(POOL_MANAGER, ILeveredFactory(address(factory)));
 
         factory.setPeripherals(address(hook), address(router));
+
+        // The half of every volatility fee that burns official $STAKD. It trades $STAKD on the router of whichever
+        // factory that coin was launched on, which is not this one.
+        address stakdToken = vm.envOr("STAKD_TOKEN", address(0));
+        address stakdRouter = vm.envOr("STAKD_ROUTER", address(0));
+        StakdBurner burner;
+        if (stakdToken != address(0) && stakdRouter != address(0)) {
+            burner = new StakdBurner(
+                ILeveredFactory(address(factory)), LeveredRouter(payable(stakdRouter)), ERC20Burnable(stakdToken)
+            );
+            factory.setStakdBurner(address(burner));
+        }
+
         factory.setKeeper(keeper, true);
         if (vm.envOr("LAUNCH_OPEN", true)) factory.setLaunchOpen(true);
         if (owner != deployer) {
@@ -62,6 +77,7 @@ contract Deploy is Script {
         console2.log("LeveredFactory", address(factory));
         console2.log("LeveredHook   ", address(hook));
         console2.log("LeveredRouter ", address(router));
+        console2.log("StakdBurner   ", address(burner));
         console2.log("platform      ", platform);
         console2.log("lighter acct  ", margin.lighterAccount);
     }

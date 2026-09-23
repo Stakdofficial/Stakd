@@ -72,7 +72,19 @@ contract DynamicFeeTest is LeveredTestBase {
     }
 
     function _allPending(PoolId id) internal view returns (uint256) {
-        return hook.pendingFees(id) + hook.pendingCrossChainFees(id) + hook.pendingDefendFees(id) + hook.pendingCreatorFees(id);
+        return hook.pendingFees(id) + hook.pendingCrossChainFees(id) + hook.pendingDefendFees(id)
+            + hook.pendingCreatorFees(id) + hook.pendingVolatilityFees(id);
+    }
+
+    /// Everything the coin earned on a normal-mode trade: the portfolio's share plus the volatility part that is
+    /// split between burning the coin and burning $STAKD.
+    function _coinPending(PoolId id) internal view returns (uint256) {
+        return hook.pendingFees(id) + hook.pendingVolatilityFees(id);
+    }
+
+    /// The volatility surcharge inside the fee a swap would pay right now.
+    function _volFee(LeveredToken tok, bool isSell, address who) internal view returns (uint16 vol) {
+        (, vol,) = hook.currentFeeParts(_poolId(tok), isSell, who);
     }
 
     /// Reference copy of the hook's decay, to check its numbers independently of its storage.
@@ -118,10 +130,10 @@ contract DynamicFeeTest is LeveredTestBase {
         vm.warp(block.timestamp + 10);
 
         assertEq(_fee(tok, true, alice), hook.MAX_FEE_BPS());
-        uint256 before = hook.pendingFees(id);
+        uint256 before = _coinPending(id);
         uint256 creatorBefore = hook.pendingCreatorFees(id);
         uint256 ethOut = _sellAs(alice, tok, got / 2);
-        uint256 sellFee = hook.pendingFees(id) - before;
+        uint256 sellFee = _coinPending(id) - before;
         uint256 creatorFee = hook.pendingCreatorFees(id) - creatorBefore;
         uint256 gross = ethOut + sellFee + creatorFee;
         assertApproxEqAbs(sellFee, gross * 500 / 10_000, 1, "5% of the ETH the sale is worth");
@@ -207,9 +219,9 @@ contract DynamicFeeTest is LeveredTestBase {
         assertGt(expected, FEE_BPS);
         assertEq(_fee(tok, false, bob), expected);
 
-        uint256 before = hook.pendingFees(id);
+        uint256 before = _coinPending(id);
         _buyAs(bob, tok, 1 ether);
-        assertEq(hook.pendingFees(id) - before, 1 ether * expected / 10_000, "charged what the view quoted");
+        assertEq(_coinPending(id) - before, 1 ether * expected / 10_000, "charged what the view quoted");
     }
 
     function test_vol_surchargeIsCapped() public {
@@ -225,9 +237,9 @@ contract DynamicFeeTest is LeveredTestBase {
         vm.warp(block.timestamp + 1);
         assertEq(_fee(tok, false, bob), 500);
         PoolId id = _poolId(tok);
-        uint256 before = hook.pendingFees(id);
+        uint256 before = _coinPending(id);
         _buyAs(bob, tok, 1 ether);
-        assertEq(hook.pendingFees(id) - before, 0.05 ether);
+        assertEq(_coinPending(id) - before, 0.05 ether);
     }
 
     function test_vol_fadesAsTheMarketCalms() public {

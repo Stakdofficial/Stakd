@@ -20,13 +20,25 @@ class Call:
 
 
 class FakeHook:
-    def __init__(self, defend_pending=None, has_defend=True, creator_pending=None, has_creator=True):
+    def __init__(self, defend_pending=None, has_defend=True, creator_pending=None, has_creator=True,
+                 vol_pending=None, has_vol=True):
         self.calls = []
         self.defend_pending = defend_pending
         self.has_defend = has_defend
         self.creator_pending = creator_pending
         self.has_creator = has_creator
+        self.vol_pending = vol_pending
+        self.has_vol = has_vol
         self.functions = self
+
+    def pendingVolatilityFees(self, pool_id):
+        self.calls.append("pendingVolatilityFees")
+        if not self.has_vol:
+            return Call(error=ValueError("execution reverted"))
+        return Call(self.vol_pending)
+
+    def collectVolatilityFees(self, pool_id):
+        return Call(name="collectVolatilityFees")
 
     def pendingDefendFees(self, pool_id):
         self.calls.append("pendingDefendFees")
@@ -62,6 +74,7 @@ def keeper_with(hook, min_burn_eth=0.00001, min_fee_eth=0.0005):
     k.chain = FakeChain(hook)
     k.cfg = SimpleNamespace(min_burn_eth=min_burn_eth, min_fee_eth=min_fee_eth)
     k._missing_buckets = set()
+    k._no_burner = False
     return k
 
 
@@ -166,3 +179,107 @@ def test_sub_accounts_of_sibling_factories_are_never_adopted(tmp_path: Path):
     k.chain = SubAccountChain(own={"0xta": 3, "0xtx": None}, siblings={"0xF2": {"0xt2": 7, "0xt3": None}})
     k.cfg = SimpleNamespace(sibling_factories=("0xF2",), sibling_state_paths=(sibling_state, tmp_path / "missing.json"))
     assert k.sub_accounts_in_use() == {3, 7, 9}
+
+
+# --------------------------------------------------------------- the volatility bucket and the $STAKD burn
+
+
+class FakeBurner:
+    def __init__(self, address="0xB0"):
+        self.address = address
+        self.burned_with = []
+        self.functions = self
+
+    def burn(self, min_tokens):
+        self.burned_with.append(min_tokens)
+        return Call(name="burn")
+
+
+class BurnerChain(FakeChain):
+    """A chain whose factory has a burner holding `balance` wei, quoting `quote` tokens for it."""
+
+    def __init__(self, hook, burner=None, balance=0, quote=0, quote_error=None):
+        super().__init__(hook)
+        self._burner = burner
+        self._quote = quote
+        self._quote_error = quote_error
+        self.w3 = SimpleNamespace(eth=SimpleNamespace(get_balance=lambda _addr: balance))
+
+    def stakd_burner(self):
+        if self._burner == "reverts":
+            raise ValueError("execution reverted")
+        return self._burner
+
+    def quote_stakd_buy(self, burner, wei):
+        if self._quote_error:
+            raise self._quote_error
+        return self._quote
+
+
+def burner_keeper(chain, min_burn_eth=0.00001, swap_slippage=0.01):
+    k = Keeper.__new__(Keeper)
+    k.chain = chain
+    k.cfg = SimpleNamespace(min_burn_eth=min_burn_eth, min_fee_eth=0.0005, swap_slippage=swap_slippage)
+    k._missing_buckets = set()
+    k._no_burner = False
+    return k
+
+
+def test_volatility_fees_are_swept_to_the_treasury():
+    k = keeper_with(FakeHook(vol_pending=WEI // 100))
+    k.collect_volatility_fees(POOL)
+    assert [name for name, _ in k.chain.sent] == ["collectVolatilityFees"]
+    assert "burns the coin and $STAKD" in k.chain.sent[0][1]
+
+
+def test_old_hook_without_the_volatility_bucket_is_asked_once():
+    hook = FakeHook(has_vol=False)
+    k = keeper_with(hook)
+    k.collect_volatility_fees(POOL)
+    k.collect_volatility_fees(POOL)
+    assert hook.calls == ["pendingVolatilityFees"]
+    assert k._missing_buckets == {"Volatility"}
+    assert k.chain.sent == []
+
+
+def test_burner_spends_its_balance_with_a_slippage_bound():
+    burner = FakeBurner()
+    k = burner_keeper(BurnerChain(FakeHook(), burner, balance=WEI // 10, quote=1_000_000))
+    k.burn_stakd()
+    assert [name for name, _ in k.chain.sent] == ["burn"]
+    assert burner.burned_with == [980_000]  # the quote minus twice the slippage
+
+
+def test_burner_waits_while_it_holds_only_dust():
+    burner = FakeBurner()
+    k = burner_keeper(BurnerChain(FakeHook(), burner, balance=1, quote=1), min_burn_eth=0.001)
+    k.burn_stakd()
+    assert k.chain.sent == []
+    assert burner.burned_with == []
+
+
+def test_factory_without_a_burner_is_asked_once():
+    chain = BurnerChain(FakeHook(), burner=None, balance=WEI)
+    k = burner_keeper(chain)
+    k.burn_stakd()
+    k.burn_stakd()
+    assert k._no_burner is True
+    assert k.chain.sent == []
+
+
+def test_older_factory_that_reverts_is_asked_once():
+    k = burner_keeper(BurnerChain(FakeHook(), burner="reverts", balance=WEI))
+    k.burn_stakd()
+    k.burn_stakd()
+    assert k._no_burner is True
+    assert k.chain.sent == []
+
+
+def test_a_failed_quote_skips_the_burn_instead_of_burning_blind():
+    burner = FakeBurner()
+    chain = BurnerChain(FakeHook(), burner, balance=WEI, quote_error=ValueError("no route"))
+    k = burner_keeper(chain)
+    k.burn_stakd()
+    assert k.chain.sent == []
+    assert burner.burned_with == []
+    assert k._no_burner is False  # it will try again next tick

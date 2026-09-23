@@ -125,3 +125,18 @@ class Robinhood:
     def quote_buy(self, token: str, wei: int) -> int:
         key = self.factory.functions.poolKeyOf(Web3.to_checksum_address(token)).call()
         return self._quote(key, True, wei)
+
+    # ------------------------------------------------------------------ official $STAKD burner
+
+    def stakd_burner(self) -> Contract | None:
+        """The contract that turns every coin's volatility fee into burned $STAKD, or None when this factory has none."""
+        addr = self.factory.functions.stakdBurner().call()
+        return None if int(addr, 16) == 0 else self.contract(addr, _abi("StakdBurner"))
+
+    def quote_stakd_buy(self, burner: Contract, wei: int) -> int:
+        """What `burner.burn` would receive. $STAKD lives on whichever factory launched it, not this one, so the
+        pool key comes from the burner's own router."""
+        router = self.contract(burner.functions.router().call(), _abi("LeveredRouter"))
+        factory = self.contract(router.functions.factory().call(), _abi("LeveredFactory"))
+        key = factory.functions.poolKeyOf(burner.functions.stakd().call()).call()
+        return self._quote(key, True, wei)

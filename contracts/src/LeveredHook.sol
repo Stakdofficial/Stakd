@@ -25,6 +25,8 @@ import {ILeveredTreasury, ILeveredFactory} from "./interfaces/ILevered.sol";
 ///           sandwich and round-trip bots pay the most.
 ///         - Creator fee: every swap also pays `CREATOR_FEE_BPS` in ETH to the coin's creator, on top of the coin's
 ///           fee, so a swap never pays more than `MAX_FEE_BPS + CREATOR_FEE_BPS` in total.
+///         - Volatility split: the volatility part of a fee never funds the portfolio. Half of the coin's share of it
+///           buys back and burns the coin, the other half buys back and burns $STAKD, in every market.
 ///         - Defend mode: once the coin's price falls `DEFEND_DROP_TICKS` below its high, the coin's share of fees goes to
 ///           buyback & burn instead of its portfolio for `DEFEND_DURATION`. Traders pay nothing extra for it.
 /// @dev The fee is taken from the ETH leg: before the swap when ETH is the specified amount, after the swap when it
@@ -73,6 +75,8 @@ contract LeveredHook is IHooks, IUnlockCallback {
     mapping(PoolId => uint256) public pendingDefendFees;
     /// @notice The creator's 1%, waiting to be paid to the coin's treasury (where only the creator can receive it).
     mapping(PoolId => uint256) public pendingCreatorFees;
+    /// @notice The volatility part of fees, waiting to be split between burning the coin and burning $STAKD.
+    mapping(PoolId => uint256) public pendingVolatilityFees;
 
     /// @notice What the hook has seen of a pool's price. Ticks are the coin's price in ETH (the pool tick negated), so
     ///         a higher tick is a more expensive coin.
@@ -95,6 +99,8 @@ contract LeveredHook is IHooks, IUnlockCallback {
     event CrossChainFeesCollected(PoolId indexed id, address indexed treasury, uint256 amount);
     event DefendFeeAccrued(PoolId indexed id, uint256 amount);
     event DefendFeesCollected(PoolId indexed id, address indexed treasury, uint256 amount);
+    event VolatilityFeeAccrued(PoolId indexed id, uint256 amount);
+    event VolatilityFeesCollected(PoolId indexed id, address indexed treasury, uint256 amount);
     event CreatorFeeAccrued(PoolId indexed id, uint256 amount);
     event CreatorFeesCollected(PoolId indexed id, address indexed treasury, uint256 amount);
     event DefendModeStarted(PoolId indexed id, uint40 until, int24 peakTick, int24 tick);
@@ -162,10 +168,10 @@ contract LeveredHook is IHooks, IUnlockCallback {
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         PoolId id = key.toId();
-        uint256 feeBps = _startSwap(id, sender, params.zeroForOne);
+        (uint256 feeBps, uint256 volBps) = _startSwap(id, sender, params.zeroForOne);
         if (_ethIsSpecified(params)) {
             uint256 amount = params.amountSpecified < 0 ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
-            uint256 fee = _charge(id, amount, feeBps, sender);
+            uint256 fee = _charge(id, amount, feeBps, volBps, sender);
             if (fee != 0) return (IHooks.beforeSwap.selector, toBeforeSwapDelta(int128(int256(fee)), 0), 0);
         }
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
@@ -180,7 +186,8 @@ contract LeveredHook is IHooks, IUnlockCallback {
             PoolId id = key.toId();
             int128 ethDelta = delta.amount0();
             uint256 amount = ethDelta < 0 ? uint256(int256(-ethDelta)) : uint256(int256(ethDelta));
-            uint256 fee = _charge(id, amount, _swapFeeBps(), sender);
+            (uint256 feeBps, uint256 volBps) = _swapFeeBps();
+            uint256 fee = _charge(id, amount, feeBps, volBps, sender);
             if (fee != 0) return (IHooks.afterSwap.selector, int128(int256(fee)));
         }
         return (IHooks.afterSwap.selector, 0);
@@ -193,12 +200,27 @@ contract LeveredHook is IHooks, IUnlockCallback {
     /// @param trader The transaction sender (EOA) the quick-flip fee is tracked against.
     function currentFee(PoolId id, bool isSell, address trader) external view returns (uint16 feeBps, bool defending) {
         MarketState memory m = _observe(marketState[id], _coinTick(id), block.timestamp);
-        feeBps = _feeBps(id, m, isSell, trader) + CREATOR_FEE_BPS;
+        (uint16 coinFee,) = _feeBps(id, m, isSell, trader);
+        feeBps = coinFee + CREATOR_FEE_BPS;
+        defending = block.timestamp < m.defendUntil;
+    }
+
+    /// @notice Same as `currentFee`, and also the volatility surcharge inside it: the part whose coin share splits
+    ///         50/50 between burning this coin and burning official $STAKD.
+    function currentFeeParts(PoolId id, bool isSell, address trader)
+        external
+        view
+        returns (uint16 feeBps, uint16 volBps, bool defending)
+    {
+        MarketState memory m = _observe(marketState[id], _coinTick(id), block.timestamp);
+        uint16 coinFee;
+        (coinFee, volBps) = _feeBps(id, m, isSell, trader);
+        feeBps = coinFee + CREATOR_FEE_BPS;
         defending = block.timestamp < m.defendUntil;
     }
 
     /// @dev Updates the pool's market state with the price before this swap, prices the swap, and remembers buys.
-    function _startSwap(PoolId id, address sender, bool isBuy) internal returns (uint256 feeBps) {
+    function _startSwap(PoolId id, address sender, bool isBuy) internal returns (uint256 feeBps, uint256 volBps) {
         MarketState memory m = marketState[id];
         // `_observe` updates `m` in place, so keep what the event reports from before.
         (uint40 prevUntil, int24 prevPeak) = (m.defendUntil, m.peakTick);
@@ -206,31 +228,43 @@ contract LeveredHook is IHooks, IUnlockCallback {
         marketState[id] = m;
         if (m.defendUntil != prevUntil) emit DefendModeStarted(id, m.defendUntil, prevPeak, m.peakTick);
 
-        feeBps = _feeBps(id, m, !isBuy, tx.origin);
+        (uint16 coinFee, uint16 vol) = _feeBps(id, m, !isBuy, tx.origin);
+        (feeBps, volBps) = (coinFee, vol);
         // Buys arriving over a bridge share one relayer as sender; they never sell, so there is nothing to track.
         if (isBuy && sender != ILeveredFactory(factory).crosschainRouter()) lastBuyAt[id][tx.origin] = uint40(block.timestamp);
         bytes32 slot = SWAP_FEE_SLOT;
+        uint256 packed = (feeBps << 16) | volBps;
         assembly ("memory-safe") {
-            tstore(slot, feeBps)
+            tstore(slot, packed)
         }
     }
 
-    function _swapFeeBps() internal view returns (uint256 feeBps) {
+    /// @dev The fee this swap is being charged, set in beforeSwap: (coin fee bps, volatility part bps).
+    function _swapFeeBps() internal view returns (uint256 feeBps, uint256 volBps) {
         bytes32 slot = SWAP_FEE_SLOT;
+        uint256 packed;
         assembly ("memory-safe") {
-            feeBps := tload(slot)
+            packed := tload(slot)
         }
+        return (packed >> 16, packed & 0xffff);
     }
 
-    function _feeBps(PoolId id, MarketState memory m, bool isSell, address trader) internal view returns (uint16) {
-        if (isSell) {
-            uint256 boughtAt = lastBuyAt[id][trader];
-            if (boughtAt != 0 && block.timestamp <= boughtAt + FLIP_WINDOW) return MAX_FEE_BPS;
-        }
+    /// @dev The coin's fee for this swap, and how much of it is the volatility part. The quick-flip fee raises the
+    ///      total to the cap but does not enlarge the volatility part, which stays what the market alone earned.
+    function _feeBps(PoolId id, MarketState memory m, bool isSell, address trader) internal view returns (uint16 fee, uint16 volBps) {
+        uint256 base = pools[id].feeBps;
         uint256 surcharge = m.volTicks / VOL_TICKS_PER_BP;
         if (surcharge > MAX_VOL_SURCHARGE_BPS) surcharge = MAX_VOL_SURCHARGE_BPS;
-        uint256 fee = pools[id].feeBps + surcharge;
-        return uint16(fee > MAX_FEE_BPS ? MAX_FEE_BPS : fee);
+
+        uint256 total = base + surcharge;
+        if (isSell) {
+            uint256 boughtAt = lastBuyAt[id][trader];
+            if (boughtAt != 0 && block.timestamp <= boughtAt + FLIP_WINDOW) total = MAX_FEE_BPS;
+        }
+        if (total > MAX_FEE_BPS) total = MAX_FEE_BPS;
+        uint256 vol = total > base ? total - base : 0;
+        if (vol > surcharge) vol = surcharge;
+        return (uint16(total), uint16(vol));
     }
 
     /// @dev Folds the current price into the market state. Movement is sampled at most once per second, so trades
@@ -311,6 +345,18 @@ contract LeveredHook is IHooks, IUnlockCallback {
         emit DefendFeesCollected(id, treasury, amount);
     }
 
+    /// @notice Pay a pool's volatility fees to its treasury, which splits them between burning the coin and burning
+    ///         $STAKD. Callable by anyone.
+    function collectVolatilityFees(PoolId id) external returns (uint256 amount) {
+        amount = pendingVolatilityFees[id];
+        if (amount == 0) return 0;
+        pendingVolatilityFees[id] = 0;
+        poolManager.unlock(abi.encode(amount));
+        address treasury = pools[id].treasury;
+        ILeveredTreasury(treasury).onVolatilityFees{value: amount}();
+        emit VolatilityFeesCollected(id, treasury, amount);
+    }
+
     /// @notice Pay a pool's creator fees to its treasury, which owes them to the creator alone. Callable by anyone.
     function collectCreatorFees(PoolId id) external returns (uint256 amount) {
         amount = pendingCreatorFees[id];
@@ -331,16 +377,27 @@ contract LeveredHook is IHooks, IUnlockCallback {
 
     /// @dev Takes the coin's fee (`coinFeeBps`) plus the creator fee on `amount` of ETH. Returns the total, which
     ///      the hook claims from the PoolManager as ERC-6909 ETH: it offsets the delta the hook returns.
-    function _charge(PoolId id, uint256 amount, uint256 coinFeeBps, address sender) internal returns (uint256 total) {
+    function _charge(PoolId id, uint256 amount, uint256 coinFeeBps, uint256 volBps, address sender)
+        internal
+        returns (uint256 total)
+    {
         total = (amount * (coinFeeBps + CREATOR_FEE_BPS)) / 10_000;
         if (total == 0) return 0;
         uint256 toCreator = (amount * CREATOR_FEE_BPS) / 10_000;
+        uint256 toVolatility = (amount * volBps) / 10_000;
         poolManager.mint(address(this), ETH.toId(), total);
         if (toCreator != 0) {
             pendingCreatorFees[id] += toCreator;
             emit CreatorFeeAccrued(id, toCreator);
         }
-        if (total > toCreator) _accrue(id, total - toCreator, sender);
+        // The volatility part is split later between burning the coin and burning $STAKD; the platform and the
+        // creator still take their usual shares of it inside the treasury.
+        if (toVolatility != 0) {
+            pendingVolatilityFees[id] += toVolatility;
+            emit VolatilityFeeAccrued(id, toVolatility);
+        }
+        uint256 rest = total - toCreator - toVolatility;
+        if (rest != 0) _accrue(id, rest, sender);
     }
 
     /// @dev Books the coin's share of a fee into the right bucket.

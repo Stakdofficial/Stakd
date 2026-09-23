@@ -19,7 +19,12 @@ contract LaunchCoin is Script {
 
         vm.startBroadcast(pk);
         (uint256 id, address token, address treasury) =
-            factory.createCoin(LeveredFactory.CreateParams({name: "Levered", symbol: "LVRD", legs: legs, feeBps: 200}));
+            factory.createCoin(LeveredFactory.CreateParams({
+            name: vm.envOr("COIN_NAME", string("Levered")),
+            symbol: vm.envOr("COIN_SYMBOL", string("LVRD")),
+            legs: legs,
+            feeBps: uint16(vm.envOr("COIN_FEE_BPS", uint256(200)))
+        }));
         vm.stopBroadcast();
 
         console2.log("coin id ", id);
