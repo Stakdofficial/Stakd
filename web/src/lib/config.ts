@@ -190,6 +190,12 @@ export const orderFactoryAbi = [
 ] as const;
 
 /**
+ * What to call the current factory on a coin card. Each new factory is the next version, so this counts the legacy
+ * ones rather than hard-coding a number that goes stale the next time we deploy.
+ */
+export const FACTORY_VERSION = process.env.NEXT_PUBLIC_FACTORY_VERSION ?? `v${LEGACY_FACTORIES.length + 1}`;
+
+/**
  * Official $STAKD is burned from two places. Its own treasury burns it like any other coin, and since Hook v4 the
  * StakdBurner burns it too: half of every other coin's volatility fee is sent there, spent on $STAKD and destroyed.
  * The burner is not a treasury, so anything counting $STAKD burns has to ask it as well.

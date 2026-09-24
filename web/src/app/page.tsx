@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { formatUnits } from "viem";
 import { avgLeverage, Basket } from "@/components/Basket";
-import { ETH_DECIMALS, FACTORY } from "@/lib/config";
+import { ETH_DECIMALS, FACTORY, FACTORY_VERSION } from "@/lib/config";
 import { useCoins, useMarkets, type CoinSummary } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 import { BasketShowcase } from "@/components/landing/BasketShowcase";
@@ -306,7 +306,7 @@ function CoinCard({ coin, markets }: { coin: CoinSummary; markets?: Map<number, 
           <div className="spread">
             <strong>{coin.name}</strong>
             <span className="row" style={{ gap: 6 }}>
-              {coin.factory.toLowerCase() === FACTORY.toLowerCase() && <span className="v3-badge">v3</span>}
+              {coin.factory.toLowerCase() === FACTORY.toLowerCase() && <span className="ver-badge">{FACTORY_VERSION}</span>}
               <span className="chip chip-soft">{avgLeverage(coin.legs).toFixed(1)}x</span>
             </span>
           </div>
