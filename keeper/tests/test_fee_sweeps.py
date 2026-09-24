@@ -283,3 +283,75 @@ def test_a_failed_quote_skips_the_burn_instead_of_burning_blind():
     assert k.chain.sent == []
     assert burner.burned_with == []
     assert k._no_burner is False  # it will try again next tick
+
+
+# --------------------------------------------------------------- pausing one coin
+
+
+class TickChain(FakeChain):
+    def __init__(self, coins):
+        super().__init__(FakeHook())
+        self._coins = coins
+        self.w3 = SimpleNamespace(eth=SimpleNamespace(get_balance=lambda _a: 10**18))
+        self.account = SimpleNamespace(address="0xkeeper")
+
+    def coins(self):
+        return self._coins
+
+    def stakd_burner(self):
+        return None
+
+
+def tick_keeper(coins, skip=()):
+    import asyncio
+
+    k = Keeper.__new__(Keeper)
+    k.chain = TickChain(coins)
+    k.cfg = SimpleNamespace(min_burn_eth=1, min_fee_eth=1, swap_slippage=0.01, min_gas_eth=0,
+                            skip_coins=frozenset(s.lower() for s in skip))
+    k._missing_buckets = set()
+    k._no_burner = False
+    k._skipped_said = set()
+    k.state = SimpleNamespace(coins={})
+    k.alerts = SimpleNamespace(send=lambda *_: None)
+    k.lighter = SimpleNamespace(markets=lambda: asyncio.sleep(0, result={}))
+    k.processed = []
+
+    async def process_coin(cs, markets, pool_id):
+        k.processed.append(cs.token)
+
+    k.process_coin = process_coin
+    k.check_gas = lambda: None
+    k.save = lambda: None
+    return k
+
+
+COINS = [
+    {"token": "0xAAA", "treasury": "0xT1", "pool_id": b"\x01" * 32},
+    {"token": "0xBBB", "treasury": "0xT2", "pool_id": b"\x02" * 32},
+]
+
+
+def test_every_coin_runs_when_nothing_is_paused():
+    import asyncio
+
+    k = tick_keeper(COINS)
+    asyncio.run(k.tick())
+    assert k.processed == ["0xAAA", "0xBBB"]
+
+
+def test_a_paused_coin_is_left_alone_and_the_rest_carry_on():
+    import asyncio
+
+    k = tick_keeper(COINS, skip=["0xaaa"])
+    asyncio.run(k.tick())
+    assert k.processed == ["0xBBB"]
+
+
+def test_a_paused_coin_keeps_its_place_in_state():
+    import asyncio
+
+    k = tick_keeper(COINS, skip=["0xaaa"])
+    asyncio.run(k.tick())
+    # It never entered state this tick, so nothing was rewritten; its sub-account stays reserved on disk.
+    assert "0xaaa" not in k.state.coins

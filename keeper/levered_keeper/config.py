@@ -45,6 +45,9 @@ class Config:
     # A sub-account used by any of their coins must never be adopted here.
     sibling_factories: tuple[str, ...] = ()
     sibling_state_paths: tuple[Path, ...] = ()
+    # Coins this keeper leaves completely alone: no sweeps, no margin, no trading, no burns. Their sub-accounts
+    # still count as in use, so nothing else claims them while a coin is paused.
+    skip_coins: frozenset[str] = frozenset()
 
 
 def _get(name: str, default: str | None = None) -> str:
@@ -90,4 +93,5 @@ def load() -> Config:
         min_gas_eth=float(_get("MIN_GAS_ETH", "0.001")),
         sibling_factories=tuple(a.strip() for a in os.getenv("LEVERED_SIBLING_FACTORIES", "").split(",") if a.strip()),
         sibling_state_paths=tuple(Path(p.strip()) for p in os.getenv("LEVERED_SIBLING_STATE_PATHS", "").split(",") if p.strip()),
+        skip_coins=frozenset(a.strip().lower() for a in os.getenv("LEVERED_SKIP_COINS", "").split(",") if a.strip()),
     )

@@ -47,6 +47,7 @@ class Keeper:
         self.alerts = Alerter(cfg.alert_webhook_url)
         self._no_crosschain_bucket = False  # set once the hook proves it is the pre-cross-chain one
         self._no_burner = False  # set once the factory proves it predates the $STAKD burner
+        self._skipped_said: set[str] = set()  # so a paused coin says so once, not every tick
         self._missing_buckets: set[str] = set()  # fee buckets the hook proved it predates (e.g. "Defend")
 
     def save(self) -> None:
@@ -71,6 +72,11 @@ class Keeper:
         markets = await self.lighter.markets()
         for coin in self.chain.coins():
             key = coin["token"].lower()
+            if key in self.cfg.skip_coins:
+                if key not in self._skipped_said:
+                    self._skipped_said.add(key)
+                    log.info("coin %s is paused by LEVERED_SKIP_COINS; leaving it alone", coin["token"])
+                continue
             cs = self.state.coins.setdefault(key, CoinState(token=coin["token"], treasury=coin["treasury"]))
             try:
                 await self.process_coin(cs, markets, coin["pool_id"])
