@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatUnits, parseAbiItem, type Address, type Hex } from "viem";
 import { usePublicClient, useReadContract } from "wagmi";
 import { treasuryAbi } from "@/lib/abis";
@@ -45,6 +45,7 @@ const PLATFORM = "0x2dd3f57b811ab39832f202af27367b1b04fe27b2";
 type Trade = { hash: Hex; side: "buy" | "sell"; eth: number; tokens: number; trader: Address; time: number };
 type Burn = { hash: Hex; eth: number; tokens: number; time: number; kind: "coin" | "volatility" };
 type Holder = { address: string; percent: number; isContract: boolean; isLocked: boolean };
+type Tab = "trades" | "burns" | "holders";
 
 export function CoinActivity({
   token,
@@ -61,19 +62,40 @@ export function CoinActivity({
   creator: Address;
   treasury: Address;
 }) {
-  const [tab, setTab] = useState<"trades" | "burns" | "holders">("trades");
+  const [tab, setTab] = useState<Tab>("trades");
+
+  // #burns (or #holders) opens the page straight on that tab and scrolls to it, so a burn link can be shared.
+  useEffect(() => {
+    const fromHash = () => {
+      const t = window.location.hash.replace("#", "");
+      if (t === "trades" || t === "burns" || t === "holders") {
+        setTab(t);
+        document.getElementById("activity")?.scrollIntoView({ block: "start", behavior: "smooth" });
+      }
+    };
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, []);
+
+  // Keep the address bar in step, so copying the URL keeps whichever tab is open.
+  const show = (t: Tab) => {
+    setTab(t);
+    history.replaceState(null, "", t === "trades" ? window.location.pathname : `#${t}`);
+  };
+
   return (
-    <div className="card stack">
+    <div className="card stack" id="activity">
       <div className="spread">
         <h3>Activity</h3>
         <div className="toggle" style={{ width: 300 }}>
-          <button className={tab === "trades" ? "on" : ""} onClick={() => setTab("trades")}>
+          <button className={tab === "trades" ? "on" : ""} onClick={() => show("trades")}>
             Trades
           </button>
-          <button className={tab === "burns" ? "on" : ""} onClick={() => setTab("burns")}>
+          <button className={tab === "burns" ? "on" : ""} onClick={() => show("burns")}>
             Burns
           </button>
-          <button className={tab === "holders" ? "on" : ""} onClick={() => setTab("holders")}>
+          <button className={tab === "holders" ? "on" : ""} onClick={() => show("holders")}>
             Holders
           </button>
         </div>
