@@ -3,6 +3,8 @@ pragma solidity ^0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
@@ -22,7 +24,15 @@ contract LeveredTreasury is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     ILeveredFactory public immutable factory;
-    address public immutable creator;
+    /// @notice Who the creator fee belongs to. Zero while a coin's fee is pointed at a social handle nobody has
+    ///         claimed yet: the ETH keeps accruing, but there is nowhere to send it until someone proves they are
+    ///         that person.
+    address public creator;
+    /// @notice "x:someone", "github:someone", "discord:someone" — empty when the creator is a plain wallet.
+    string public creatorHandle;
+    /// @notice The platform's own immutable id for whoever claimed the handle. Usernames change and get recycled;
+    ///         this does not. Once set, only this id can ever move the payout address again.
+    bytes32 public creatorSubject;
     uint16 public immutable creatorShareBps;
     uint16 public immutable protocolShareBps;
 
@@ -49,6 +59,8 @@ contract LeveredTreasury is ReentrancyGuard {
     event FeesReceived(uint256 total, uint256 toMargin, uint256 toCreator, uint256 toProtocol);
     event CrossChainFeesReceived(uint256 total, uint256 toBurn, uint256 toCreator, uint256 toProtocol);
     event CreatorFeesReceived(uint256 amount);
+    event CreatorHandleClaimed(string handle, bytes32 indexed subject, address indexed payout);
+    event CreatorPayoutSet(bytes32 indexed subject, address indexed payout);
     event DefendFeesReceived(uint256 total, uint256 toBurn, uint256 toCreator, uint256 toProtocol);
     event VolatilityFeesReceived(uint256 total, uint256 toBurn, uint256 toStakd, uint256 toCreator, uint256 toProtocol);
     event MarginDeposited(uint256 eth, uint256 usdg, address indexed lighterAccount);
@@ -65,15 +77,27 @@ contract LeveredTreasury is ReentrancyGuard {
     error Paused();
     error MarginCapReached();
     error EthTransferFailed();
+    error NotClaimedYet();
+    error WrongAccount();
+    error BadProof();
+    error ProofExpired();
 
     modifier onlyKeeper() {
         if (!factory.isKeeper(msg.sender)) revert OnlyKeeper();
         _;
     }
 
-    constructor(address creator_, uint16 creatorShareBps_, uint16 protocolShareBps_, Leg[] memory legs_) {
+    constructor(
+        address creator_,
+        string memory creatorHandle_,
+        uint16 creatorShareBps_,
+        uint16 protocolShareBps_,
+        Leg[] memory legs_
+    ) {
         factory = ILeveredFactory(msg.sender);
-        creator = creator_;
+        // Pointing the fee at a handle means the launcher keeps none of it, so there is no address yet.
+        creatorHandle = creatorHandle_;
+        creator = bytes(creatorHandle_).length == 0 ? creator_ : address(0);
         creatorShareBps = creatorShareBps_;
         protocolShareBps = protocolShareBps_;
         for (uint256 i; i < legs_.length; ++i) {
@@ -199,11 +223,45 @@ contract LeveredTreasury is ReentrancyGuard {
     }
 
     /// @notice Pay the creator's accrued fee share. Anyone can trigger it; ETH only ever goes to the creator.
+    ///         While a handle is unclaimed there is no creator, so the fees simply keep waiting.
     function claimCreatorFees() external nonReentrant {
+        if (creator == address(0)) revert NotClaimedYet();
         uint256 amount = creatorOwed;
         creatorOwed = 0;
         _sendEth(creator, amount);
         emit FeesClaimed(creator, amount);
+    }
+
+    /// @notice Prove you are the handle this coin's fee was pointed at, and name the wallet to be paid.
+    /// @param payout   Where the creator fee should go from now on.
+    /// @param subject  The platform's immutable id for the account that logged in.
+    /// @param deadline When this proof stops being accepted.
+    /// @param proof    Signed by the platform's claim signer after it verified the login.
+    ///
+    ///         The first account to prove the handle keeps it for good: afterwards only that same id can move the
+    ///         payout address, so a rename or a recycled username cannot take the fees away.
+    function bindCreator(address payout, bytes32 subject, uint256 deadline, bytes calldata proof)
+        external
+        nonReentrant
+    {
+        if (bytes(creatorHandle).length == 0) revert AlreadySet(); // a plain-wallet coin has nothing to claim
+        if (payout == address(0)) revert BadProof();
+        if (block.timestamp > deadline) revert ProofExpired();
+        if (creatorSubject != bytes32(0) && subject != creatorSubject) revert WrongAccount();
+
+        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
+            keccak256(abi.encode(block.chainid, address(this), creatorHandle, subject, payout, deadline))
+        );
+        // tryRecover so a malformed signature comes back as our own error rather than one from deep in the library.
+        (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, proof);
+        if (err != ECDSA.RecoverError.NoError || recovered != factory.claimSigner()) revert BadProof();
+
+        if (creatorSubject == bytes32(0)) {
+            creatorSubject = subject;
+            emit CreatorHandleClaimed(creatorHandle, subject, payout);
+        }
+        creator = payout;
+        emit CreatorPayoutSet(subject, payout);
     }
 
     /// @notice Pay the platform's accrued fee share to the factory's fee recipient.

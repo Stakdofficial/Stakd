@@ -28,6 +28,7 @@ interface ILeveredFactory {
     function hook() external view returns (address);
     function crosschainRouter() external view returns (address);
     function stakdBurner() external view returns (address);
+    function claimSigner() external view returns (address);
     function isKeeper(address account) external view returns (bool);
     function protocolFeeRecipient() external view returns (address);
     function marginConfig() external view returns (MarginConfig memory);

@@ -52,6 +52,10 @@ contract LeveredFactory is Ownable, IUnlockCallback {
         // call. Nobody can trade the pool before this, so there is nothing to front-run; the bound is only here
         // to make the expected amount explicit.
         uint256 minDevTokens;
+        // Point the creator fee at someone's social account instead of your own wallet: "x:someone",
+        // "github:someone", "discord:someone". Leave it empty to keep the fee yourself. Anyone can name anyone;
+        // the fee waits in the treasury until that person proves who they are.
+        string creatorHandle;
     }
 
     struct Coin {
@@ -70,6 +74,9 @@ contract LeveredFactory is Ownable, IUnlockCallback {
     address public crosschainRouter;
     /// @notice Where the STAKD half of every volatility fee goes: a burner that buys $STAKD and destroys it.
     address public stakdBurner;
+    /// @notice Signs the proof that someone logged in as a given social account. The platform's backend holds the
+    ///         key; it can only ever point a coin's creator fee at the account that proved it owns the handle.
+    address public claimSigner;
 
     /// @notice Launch price as a tick of ETH-per-token (raw units).
     int24 public startTick;
@@ -102,6 +109,7 @@ contract LeveredFactory is Ownable, IUnlockCallback {
     event PeripheralsSet(address hook, address router);
     event CrosschainRouterSet(address router);
     event StakdBurnerSet(address burner);
+    event ClaimSignerSet(address signer);
     event DevBought(uint256 indexed id, address indexed token, address indexed creator, uint256 ethIn, uint256 tokensOut);
     event KeeperSet(address indexed keeper, bool allowed);
     event MarginConfigSet(MarginConfig config);
@@ -167,7 +175,7 @@ contract LeveredFactory is Ownable, IUnlockCallback {
         if (p.feeBps < MIN_FEE_BPS || p.feeBps > MAX_FEE_BPS) revert InvalidFee();
         _validateLegs(p.legs);
 
-        LeveredTreasury t = new LeveredTreasury(msg.sender, creatorShareBps, protocolShareBps, p.legs);
+        LeveredTreasury t = new LeveredTreasury(msg.sender, p.creatorHandle, creatorShareBps, protocolShareBps, p.legs);
         LeveredToken tok = new LeveredToken(p.name, p.symbol, TOTAL_SUPPLY);
         t.initToken(tok);
         token = address(tok);
@@ -363,6 +371,12 @@ contract LeveredFactory is Ownable, IUnlockCallback {
         _checkStartTick(tick);
         startTick = tick;
         emit StartTickSet(tick);
+    }
+
+    /// @notice Set who signs social-login proofs. Changeable, so a leaked signing key can be replaced.
+    function setClaimSigner(address signer) external onlyOwner {
+        claimSigner = signer;
+        emit ClaimSignerSet(signer);
     }
 
     function setMarginCapPerCoin(uint256 amount) external onlyOwner {

@@ -30,7 +30,7 @@ contract RehearseV4 is Script {
         StakdBurner burner = StakdBurner(payable(stakd));
         if (stakd == address(0)) {
             (, address stakdToken,) = factory.createCoin(
-                LeveredFactory.CreateParams({name: "Stakd Testnet", symbol: "STAKD", legs: legs, feeBps: 200, minDevTokens: 0})
+                LeveredFactory.CreateParams({name: "Stakd Testnet", symbol: "STAKD", legs: legs, feeBps: 200, minDevTokens: 0, creatorHandle: ""})
             );
             burner = new StakdBurner(
                 ILeveredFactory(address(factory)), LeveredRouter(payable(factory.router())), ERC20Burnable(stakdToken)
@@ -41,7 +41,7 @@ contract RehearseV4 is Script {
 
         // The coin we will actually trade to make the volatility fee fire.
         (, address coin, address treasury) = factory.createCoin(
-            LeveredFactory.CreateParams({name: "Volatile Test", symbol: vm.envOr("SYMBOL", string("VOLT")), legs: legs, feeBps: 200, minDevTokens: 0})
+            LeveredFactory.CreateParams({name: "Volatile Test", symbol: vm.envOr("SYMBOL", string("VOLT")), legs: legs, feeBps: 200, minDevTokens: 0, creatorHandle: ""})
         );
 
         vm.stopBroadcast();

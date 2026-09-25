@@ -18,7 +18,7 @@ contract LaunchTestCoin is Script {
 
         vm.startBroadcast(pk);
         (uint256 id, address token, address treasury) = factory.createCoin(
-            LeveredFactory.CreateParams({name: "Stakd Test", symbol: "STKTEST", legs: legs, feeBps: 500, minDevTokens: 0})
+            LeveredFactory.CreateParams({name: "Stakd Test", symbol: "STKTEST", legs: legs, feeBps: 500, minDevTokens: 0, creatorHandle: ""})
         );
         vm.stopBroadcast();
 

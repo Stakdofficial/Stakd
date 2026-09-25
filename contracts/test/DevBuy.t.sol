@@ -16,7 +16,7 @@ contract DevBuyTest is LeveredTestBase {
             symbol: "DEVB",
             legs: _lvrdLegs(),
             feeBps: FEE_BPS,
-            minDevTokens: 0
+            minDevTokens: 0, creatorHandle: ""
         });
     }
 

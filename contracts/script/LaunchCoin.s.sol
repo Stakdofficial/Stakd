@@ -27,7 +27,7 @@ contract LaunchCoin is Script {
             symbol: vm.envOr("COIN_SYMBOL", string("LVRD")),
             legs: legs,
             feeBps: uint16(vm.envOr("COIN_FEE_BPS", uint256(200))),
-            minDevTokens: minDev
+            minDevTokens: minDev, creatorHandle: ""
         }));
         vm.stopBroadcast();
 
