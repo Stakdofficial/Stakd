@@ -3,9 +3,19 @@
   "type": "constructor",
   "inputs": [
    {
+    "name": "factory_",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
     "name": "creator_",
     "type": "address",
     "internalType": "address"
+   },
+   {
+    "name": "creatorHandle_",
+    "type": "string",
+    "internalType": "string"
    },
    {
     "name": "creatorShareBps_",
@@ -50,6 +60,34 @@
  {
   "type": "receive",
   "stateMutability": "payable"
+ },
+ {
+  "type": "function",
+  "name": "bindCreator",
+  "inputs": [
+   {
+    "name": "payout",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "subject",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "deadline",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "proof",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
  },
  {
   "type": "function",
@@ -104,6 +142,19 @@
  },
  {
   "type": "function",
+  "name": "creatorHandle",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "string",
+    "internalType": "string"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "creatorOwed",
   "inputs": [],
   "outputs": [
@@ -124,6 +175,19 @@
     "name": "",
     "type": "uint16",
     "internalType": "uint16"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "creatorSubject",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
    }
   ],
   "stateMutability": "view"
@@ -516,6 +580,50 @@
  },
  {
   "type": "event",
+  "name": "CreatorHandleClaimed",
+  "inputs": [
+   {
+    "name": "handle",
+    "type": "string",
+    "indexed": false,
+    "internalType": "string"
+   },
+   {
+    "name": "subject",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "payout",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "CreatorPayoutSet",
+  "inputs": [
+   {
+    "name": "subject",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "payout",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
   "name": "CrossChainFeesReceived",
   "inputs": [
    {
@@ -708,6 +816,11 @@
  },
  {
   "type": "error",
+  "name": "BadProof",
+  "inputs": []
+ },
+ {
+  "type": "error",
   "name": "EthTransferFailed",
   "inputs": []
  },
@@ -724,6 +837,11 @@
  {
   "type": "error",
   "name": "NoProfitToBurn",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotClaimedYet",
   "inputs": []
  },
  {
@@ -748,6 +866,11 @@
  },
  {
   "type": "error",
+  "name": "ProofExpired",
+  "inputs": []
+ },
+ {
+  "type": "error",
   "name": "ReentrancyGuardReentrantCall",
   "inputs": []
  },
@@ -761,5 +884,10 @@
     "internalType": "address"
    }
   ]
+ },
+ {
+  "type": "error",
+  "name": "WrongAccount",
+  "inputs": []
  }
 ]

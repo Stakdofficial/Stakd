@@ -35,6 +35,11 @@ export default function CreatePage() {
   const [feePct, setFeePct] = useState(2);
   // The creator's own first buy, made in the launch transaction itself.
   const [devBuy, setDevBuy] = useState("");
+  // Point the 1% at someone's social account instead of your own wallet.
+  const [feePlatform, setFeePlatform] = useState<"me" | "x" | "github" | "discord">("me");
+  const [feeHandle, setFeeHandle] = useState("");
+  const creatorHandle =
+    feePlatform === "me" || !feeHandle.trim() ? "" : `${feePlatform}:${feeHandle.trim().replace(/^@/, "").toLowerCase()}`;
   // Optional profile, written to StakdMetadata right after the launch transaction.
   const [profile, setProfile] = useState({ image: "", description: "", telegram: "", x: "", website: "" });
   const hasProfile = Object.values(profile).some((v) => v.trim() !== "");
@@ -134,9 +139,7 @@ export default function CreatePage() {
             feeBps: Math.round(feePct * 100),
             // 2% of slippage room: the quote uses the lowest possible fee, the coin may charge more.
             minDevTokens: devTokens ? (devTokens * 90n) / 100n : 0n,
-            // Pointing the fee at a social handle is not exposed yet: the claim flow is not finished, so a coin
-            // launched that way would have fees nobody could collect.
-            creatorHandle: "",
+            creatorHandle,
           },
         ],
         value: devBuyWei,
@@ -385,6 +388,34 @@ export default function CreatePage() {
             <div className="muted small">
               1%–5%, paid in ETH on every buy and sell
               {creatorFeePct > 0 ? ` · traders pay ${feePct + creatorFeePct}% including your ${creatorFeePct}%` : ""}
+            </div>
+          </div>
+          <div>
+            <label className="label">Who gets the 1% creator fee</label>
+            <div className="toggle" style={{ width: "100%", marginBottom: 10 }}>
+              {(["me", "x", "github", "discord"] as const).map((k) => (
+                <button key={k} className={feePlatform === k ? "on" : ""} onClick={() => setFeePlatform(k)}>
+                  {k === "me" ? "Me" : k === "x" ? "X" : k === "github" ? "GitHub" : "Discord"}
+                </button>
+              ))}
+            </div>
+            {feePlatform !== "me" && (
+              <input
+                placeholder={feePlatform === "discord" ? "username" : "@username"}
+                value={feeHandle}
+                onChange={(e) => setFeeHandle(e.target.value.replace(/[^A-Za-z0-9_.@-]/g, ""))}
+              />
+            )}
+            <div className="muted small">
+              {creatorHandle ? (
+                <>
+                  Every trade pays <strong>{creatorHandle}</strong> 1% in ETH. You keep none of it. They claim it by
+                  signing in with that account — if they never do, it stays in the coin&apos;s treasury forever and
+                  nobody can take it.
+                </>
+              ) : (
+                "By default the 1% comes to your wallet. You can point it at someone else's account instead."
+              )}
             </div>
           </div>
           <div>
