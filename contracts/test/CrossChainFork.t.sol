@@ -87,7 +87,7 @@ contract CrossChainForkTest is Test {
         legs[2] = Leg(0, true, 3_000, 20);
         vm.prank(creator);
         (, address tokenAddr, address treasuryAddr) =
-            factory.createCoin(LeveredFactory.CreateParams("Alpha", "ALPHA", legs, 200));
+            factory.createCoin(LeveredFactory.CreateParams("Alpha", "ALPHA", legs, 200, 0));
         tok = LeveredToken(tokenAddr);
         t = LeveredTreasury(payable(treasuryAddr));
         id = factory.poolKeyOf(tokenAddr).toId();

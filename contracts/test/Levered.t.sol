@@ -188,7 +188,7 @@ abstract contract LeveredTestBase is Test {
     }
 
     function _params(Leg[] memory legs) internal pure returns (LeveredFactory.CreateParams memory) {
-        return LeveredFactory.CreateParams({name: "Levered", symbol: "LVRD", legs: legs, feeBps: FEE_BPS});
+        return LeveredFactory.CreateParams({name: "Levered", symbol: "LVRD", legs: legs, feeBps: FEE_BPS, minDevTokens: 0});
     }
 
     function _create() internal returns (LeveredToken tok, LeveredTreasury t) {

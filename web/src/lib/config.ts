@@ -1,11 +1,30 @@
 import { defineChain, erc20Abi, type Address } from "viem";
 
-/** Robinhood Chain: Arbitrum Orbit L2, ETH gas. Browsers use the public RPC; the keeper uses a private one. */
+/** The public RPC, plus any private one set in RPC_URL. Server code and the /api/rpc proxy read these, newest first. */
+export const SERVER_RPC_URLS = [process.env.RPC_URL, "https://rpc.mainnet.chain.robinhood.com"].filter(
+  (u): u is string => !!u,
+);
+
+/**
+ * Robinhood Chain: Arbitrum Orbit L2, ETH gas.
+ *
+ * The browser goes through /api/rpc on our own origin: some edges of the public RPC send the CORS header twice, which
+ * browsers reject, and the page would then read nothing from the chain. Server-side code calls the upstream directly,
+ * where CORS does not apply. NEXT_PUBLIC_RPC_URL still overrides the browser side if it is set.
+ */
 export const robinhood = defineChain({
   id: 4663,
   name: "Robinhood Chain",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: { default: { http: [process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com"] } },
+  rpcUrls: {
+    default: {
+      http: [
+        typeof window === "undefined"
+          ? SERVER_RPC_URLS[0]
+          : (process.env.NEXT_PUBLIC_RPC_URL ?? "/api/rpc"),
+      ],
+    },
+  },
   blockExplorers: { default: { name: "Blockscout", url: "https://robinhoodchain.blockscout.com" } },
 });
 

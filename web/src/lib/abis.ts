@@ -355,79 +355,6 @@ export const factoryAbi = [
   },
   {
     "type": "function",
-    "name": "createCoin",
-    "inputs": [
-      {
-        "name": "p",
-        "type": "tuple",
-        "internalType": "struct LeveredFactory.CreateParams",
-        "components": [
-          {
-            "name": "name",
-            "type": "string",
-            "internalType": "string"
-          },
-          {
-            "name": "symbol",
-            "type": "string",
-            "internalType": "string"
-          },
-          {
-            "name": "legs",
-            "type": "tuple[]",
-            "internalType": "struct Leg[]",
-            "components": [
-              {
-                "name": "marketId",
-                "type": "uint16",
-                "internalType": "uint16"
-              },
-              {
-                "name": "isLong",
-                "type": "bool",
-                "internalType": "bool"
-              },
-              {
-                "name": "weightBps",
-                "type": "uint16",
-                "internalType": "uint16"
-              },
-              {
-                "name": "leverageX10",
-                "type": "uint16",
-                "internalType": "uint16"
-              }
-            ]
-          },
-          {
-            "name": "feeBps",
-            "type": "uint16",
-            "internalType": "uint16"
-          }
-        ]
-      }
-    ],
-    "outputs": [
-      {
-        "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "token",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "treasury",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "creatorShareBps",
     "inputs": [],
     "outputs": [
@@ -1499,6 +1426,103 @@ export const factoryAbi = [
     "type": "error",
     "name": "TooEarly",
     "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "createCoin",
+    "inputs": [
+      {
+        "name": "p",
+        "type": "tuple",
+        "internalType": "struct LeveredFactory.CreateParams",
+        "components": [
+          {
+            "name": "name",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "symbol",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "legs",
+            "type": "tuple[]",
+            "internalType": "struct Leg[]",
+            "components": [
+              {
+                "name": "marketId",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "isLong",
+                "type": "bool",
+                "internalType": "bool"
+              },
+              {
+                "name": "weightBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "leverageX10",
+                "type": "uint16",
+                "internalType": "uint16"
+              }
+            ]
+          },
+          {
+            "name": "feeBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "minDevTokens",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "treasury",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "quoteLaunchBuy",
+    "inputs": [
+      {
+        "name": "ethIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "tokensOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   }
 ] as const;
 

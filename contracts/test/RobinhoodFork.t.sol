@@ -62,7 +62,7 @@ contract RobinhoodForkTest is Test {
         legs[1] = Leg(1, true, 3_000, 20); // BTC
         legs[2] = Leg(0, true, 3_000, 20); // ETH
         vm.prank(creator);
-        (, address tokenAddr, address treasuryAddr) = factory.createCoin(LeveredFactory.CreateParams("Levered", "LVRD", legs, 200));
+        (, address tokenAddr, address treasuryAddr) = factory.createCoin(LeveredFactory.CreateParams("Levered", "LVRD", legs, 200, 0));
         LeveredToken tok = LeveredToken(tokenAddr);
         LeveredTreasury t = LeveredTreasury(payable(treasuryAddr));
         PoolId id = factory.poolKeyOf(tokenAddr).toId();

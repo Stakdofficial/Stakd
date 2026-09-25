@@ -2,13 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { decodeEventLog } from "viem";
+import { decodeEventLog, formatUnits, parseEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { avgLeverage, Basket } from "@/components/Basket";
 import { ImagePicker } from "@/components/ImagePicker";
 import { factoryAbi, hookAbi } from "@/lib/abis";
 import { profileLink } from "@/lib/links";
-import { chain, FACTORY, metadataAbi, metadataFor } from "@/lib/config";
+import { chain, FACTORY, metadataAbi, metadataFor, TOKEN_DECIMALS } from "@/lib/config";
 import { useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd, type LighterMarket } from "@/lib/lighter";
 
@@ -33,6 +33,8 @@ export default function CreatePage() {
   const [symbol, setSymbol] = useState("");
   const [legs, setLegs] = useState<DraftLeg[]>(DEFAULT_LEGS);
   const [feePct, setFeePct] = useState(2);
+  // The creator's own first buy, made in the launch transaction itself.
+  const [devBuy, setDevBuy] = useState("");
   // Optional profile, written to StakdMetadata right after the launch transaction.
   const [profile, setProfile] = useState({ image: "", description: "", telegram: "", x: "", website: "" });
   const hasProfile = Object.values(profile).some((v) => v.trim() !== "");
@@ -99,6 +101,22 @@ export default function CreatePage() {
     setLegs((ls) => ls.map((l, i) => ({ ...l, weight: i === 0 ? 100 - even * (ls.length - 1) : even })));
   }
 
+  const devBuyWei = (() => {
+    const n = Number(devBuy);
+    return devBuy.trim() !== "" && Number.isFinite(n) && n > 0 ? parseEther(devBuy.trim()) : 0n;
+  })();
+
+  const devQuote = useReadContract({
+    address: FACTORY,
+    abi: factoryAbi,
+    functionName: "quoteLaunchBuy",
+    args: [devBuyWei],
+    query: { enabled: devBuyWei > 0n },
+  });
+
+  const devTokens = devQuote.data as bigint | undefined;
+  const devSupplyPct = devTokens ? (Number(formatUnits(devTokens, TOKEN_DECIMALS)) / 1_000_000_000) * 100 : 0;
+
   async function launch() {
     if (!address || !client) return;
     setError(null);
@@ -114,8 +132,11 @@ export default function CreatePage() {
             symbol: symbol.trim().toUpperCase(),
             legs: chainLegs,
             feeBps: Math.round(feePct * 100),
+            // 2% of slippage room: the quote uses the lowest possible fee, the coin may charge more.
+            minDevTokens: devTokens ? (devTokens * 90n) / 100n : 0n,
           },
         ],
+        value: devBuyWei,
       });
       setStep("Launching on Robinhood Chain…");
       const receipt = await client.waitForTransactionReceipt({ hash });
@@ -361,6 +382,30 @@ export default function CreatePage() {
             <div className="muted small">
               1%–5%, paid in ETH on every buy and sell
               {creatorFeePct > 0 ? ` · traders pay ${feePct + creatorFeePct}% including your ${creatorFeePct}%` : ""}
+            </div>
+          </div>
+          <div>
+            <label className="label">Buy your own coin at launch (optional)</label>
+            <input
+              inputMode="decimal"
+              placeholder="0.0 ETH"
+              value={devBuy}
+              onChange={(e) => setDevBuy(e.target.value.replace(/[^0-9.]/g, ""))}
+            />
+            <div className="muted small">
+              {devBuyWei > 0n && devTokens ? (
+                <>
+                  You get about{" "}
+                  <strong>
+                    {Number(formatUnits(devTokens, TOKEN_DECIMALS)).toLocaleString("en-US", {
+                      maximumFractionDigits: 0,
+                    })}
+                  </strong>{" "}
+                  {symbol.trim().toUpperCase() || "tokens"} · {devSupplyPct.toFixed(2)}% of supply
+                </>
+              ) : (
+                "Bought in the same transaction that launches the coin, so nobody can get in ahead of you. Pays the same fee as any other buy."
+              )}
             </div>
           </div>
           <div>

@@ -10,6 +10,7 @@ import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockC
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import {FixedPoint96} from "@uniswap/v4-core/src/libraries/FixedPoint96.sol";
+import {SqrtPriceMath} from "@uniswap/v4-core/src/libraries/SqrtPriceMath.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -19,6 +20,7 @@ import {Leg, MarginConfig} from "./interfaces/ILevered.sol";
 import {LeveredToken} from "./LeveredToken.sol";
 import {LeveredTreasury} from "./LeveredTreasury.sol";
 import {LeveredHook} from "./LeveredHook.sol";
+import {LeveredRouter} from "./LeveredRouter.sol";
 
 /// @title LeveredFactory
 /// @notice Launches a coin, its treasury and a Uniswap v4 ETH/COIN pool on Robinhood Chain. The creator puts in no ETH:
@@ -46,6 +48,10 @@ contract LeveredFactory is Ownable, IUnlockCallback {
         string symbol;
         Leg[] legs;
         uint16 feeBps; // trading fee in ETH on every buy and sell, chosen by the creator: 1%–5%
+        // The creator can buy their own coin in the same transaction that launches it, by sending ETH with the
+        // call. Nobody can trade the pool before this, so there is nothing to front-run; the bound is only here
+        // to make the expected amount explicit.
+        uint256 minDevTokens;
     }
 
     struct Coin {
@@ -96,6 +102,7 @@ contract LeveredFactory is Ownable, IUnlockCallback {
     event PeripheralsSet(address hook, address router);
     event CrosschainRouterSet(address router);
     event StakdBurnerSet(address burner);
+    event DevBought(uint256 indexed id, address indexed token, address indexed creator, uint256 ethIn, uint256 tokensOut);
     event KeeperSet(address indexed keeper, bool allowed);
     event MarginConfigSet(MarginConfig config);
     event MarginConfigProposed(MarginConfig config, uint256 eta);
@@ -148,7 +155,11 @@ contract LeveredFactory is Ownable, IUnlockCallback {
 
     // ---------------------------------------------------------------- launch
 
-    function createCoin(CreateParams calldata p) external returns (uint256 id, address token, address treasury) {
+    function createCoin(CreateParams calldata p)
+        external
+        payable
+        returns (uint256 id, address token, address treasury)
+    {
         if (hook == address(0)) revert NotConfigured();
         if (paused) revert LaunchesPaused();
         if (!launchOpen && !isLauncher[msg.sender]) revert NotAllowedToLaunch();
@@ -188,6 +199,30 @@ contract LeveredFactory is Ownable, IUnlockCallback {
         coinIdOf[token] = id + 1;
 
         emit CoinCreated(id, token, msg.sender, treasury, PoolId.unwrap(poolId), p.name, p.symbol, p.legs);
+
+        // The creator's own first buy, in the launch transaction, so no bot can get in ahead of them. It pays the
+        // same fee as anyone else's buy.
+        if (msg.value != 0) {
+            uint256 bought = LeveredRouter(payable(router)).buy{value: msg.value}(token, p.minDevTokens, msg.sender);
+            emit DevBought(id, token, msg.sender, msg.value, bought);
+        }
+    }
+
+    /// @notice What a creator would receive for `ethIn` if they bought at launch. The pool starts identically for
+    ///         every coin, so this can be asked before the coin exists.
+    function quoteLaunchBuy(uint256 ethIn) external view returns (uint256 tokensOut) {
+        if (ethIn == 0) return 0;
+        int24 launchTick = -startTick;
+        uint160 sqrtStart = TickMath.getSqrtPriceAtTick(launchTick);
+        uint160 sqrtFloor = TickMath.getSqrtPriceAtTick(-MAX_USABLE_TICK);
+        uint128 liquidity = uint128(FullMath.mulDiv(TOTAL_SUPPLY - 1e12, FixedPoint96.Q96, sqrtStart - sqrtFloor));
+
+        // Buying the coin with ETH moves the price down through the range, so this is a zero-for-one swap. The
+        // hook takes its fee out of the ETH before the swap, so quote on what actually reaches the pool.
+        uint256 feeBps = uint256(LeveredHook(payable(hook)).CREATOR_FEE_BPS()) + MIN_FEE_BPS;
+        uint256 intoPool = ethIn - (ethIn * feeBps) / 10_000;
+        uint160 sqrtAfter = SqrtPriceMath.getNextSqrtPriceFromInput(sqrtStart, liquidity, intoPool, true);
+        tokensOut = SqrtPriceMath.getAmount1Delta(sqrtAfter, sqrtStart, liquidity, false);
     }
 
     /// @dev Adds the single-sided position. There is no function to remove it.
