@@ -17,6 +17,8 @@ import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {LeveredFactory} from "../src/LeveredFactory.sol";
+import {StakdTreasuryDeployer} from "../src/StakdTreasuryDeployer.sol";
+import {StakdClaimVerifier} from "../src/StakdClaimVerifier.sol";
 import {LeveredToken} from "../src/LeveredToken.sol";
 import {LeveredTreasury} from "../src/LeveredTreasury.sol";
 import {LeveredHook} from "../src/LeveredHook.sol";
@@ -155,6 +157,8 @@ abstract contract LeveredTestBase is Test {
         exactOut = new ExactOutSwapper(pm);
 
         vm.startPrank(owner);
+        factory.setTreasuryDeployer(address(new StakdTreasuryDeployer()));
+        factory.setClaimVerifier(address(new StakdClaimVerifier()));
         factory.setPeripherals(address(hook), address(router));
         factory.setKeeper(keeper, true);
         factory.setLaunchOpen(true);

@@ -4,6 +4,9 @@ pragma solidity ^0.8.26;
 import {Script, console2} from "forge-std/Script.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {LeveredFactory} from "../src/LeveredFactory.sol";
+import {StakdTreasuryDeployer} from "../src/StakdTreasuryDeployer.sol";
+import {StakdClaimVerifier} from "../src/StakdClaimVerifier.sol";
+import {StakdLaunchQuoter, IStartTick} from "../src/StakdLaunchQuoter.sol";
 import {LeveredHook} from "../src/LeveredHook.sol";
 import {LeveredRouter} from "../src/LeveredRouter.sol";
 import {StakdBurner} from "../src/StakdBurner.sol";
@@ -51,6 +54,10 @@ contract Deploy is Script {
         LeveredHook hook = new LeveredHook{salt: salt}(POOL_MANAGER, address(factory));
         LeveredRouter router = new LeveredRouter(POOL_MANAGER, ILeveredFactory(address(factory)));
 
+        factory.setTreasuryDeployer(address(new StakdTreasuryDeployer()));
+        factory.setClaimVerifier(address(new StakdClaimVerifier()));
+        address claimSigner = vm.envOr("CLAIM_SIGNER", address(0));
+        if (claimSigner != address(0)) factory.setClaimSigner(claimSigner);
         factory.setPeripherals(address(hook), address(router));
 
         // The half of every volatility fee that burns official $STAKD. It trades $STAKD on the router of whichever
@@ -71,8 +78,11 @@ contract Deploy is Script {
             factory.setLauncher(owner, true);
             factory.transferOwnership(owner);
         }
+        StakdLaunchQuoter quoter = new StakdLaunchQuoter(IStartTick(address(factory)));
+
         vm.stopBroadcast();
 
+        console2.log("quoter       ", address(quoter));
         console2.log("chainId       ", block.chainid);
         console2.log("LeveredFactory", address(factory));
         console2.log("LeveredHook   ", address(hook));

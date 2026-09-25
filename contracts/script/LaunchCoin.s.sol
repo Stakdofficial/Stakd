@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {LeveredFactory} from "../src/LeveredFactory.sol";
+import {StakdLaunchQuoter} from "../src/StakdLaunchQuoter.sol";
 import {Leg} from "../src/interfaces/ILevered.sol";
 
 /// @notice Launch LVRD (2x long SPY 40% / BTC 30% / ETH 30%, Lighter Robinhood market ids). No ETH needed.
@@ -18,7 +19,9 @@ contract LaunchCoin is Script {
         legs[2] = Leg({marketId: 0, isLong: true, weightBps: 3_000, leverageX10: 20}); // ETH
 
         uint256 devBuy = vm.envOr("DEV_BUY_WEI", uint256(0));
-        uint256 minDev = devBuy == 0 ? 0 : (factory.quoteLaunchBuy(devBuy, uint16(vm.envOr("COIN_FEE_BPS", uint256(200)))) * 90) / 100;
+        uint256 minDev = devBuy == 0
+            ? 0
+            : (StakdLaunchQuoter(vm.envAddress("QUOTER")).quoteLaunchBuy(devBuy, uint16(vm.envOr("COIN_FEE_BPS", uint256(200)))) * 90) / 100;
 
         vm.startBroadcast(pk);
         (uint256 id, address token, address treasury) =

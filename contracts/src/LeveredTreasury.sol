@@ -3,8 +3,6 @@ pragma solidity ^0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
@@ -20,6 +18,18 @@ import {LeveredRouter} from "./LeveredRouter.sol";
 ///           Lighter account.
 ///         - Creator and platform shares can only be paid to the creator and the platform recipient.
 ///         - Anything else (returned trading profit, as USDG or ETH) can only buy back and burn the coin.
+interface IClaimVerifier {
+    function isValid(
+        address signer,
+        address treasury,
+        string calldata handle,
+        bytes32 subject,
+        address payout,
+        uint256 deadline,
+        bytes calldata proof
+    ) external view returns (bool);
+}
+
 contract LeveredTreasury is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -88,13 +98,14 @@ contract LeveredTreasury is ReentrancyGuard {
     }
 
     constructor(
+        address factory_,
         address creator_,
         string memory creatorHandle_,
         uint16 creatorShareBps_,
         uint16 protocolShareBps_,
         Leg[] memory legs_
     ) {
-        factory = ILeveredFactory(msg.sender);
+        factory = ILeveredFactory(factory_);
         // Pointing the fee at a handle means the launcher keeps none of it, so there is no address yet.
         creatorHandle = creatorHandle_;
         creator = bytes(creatorHandle_).length == 0 ? creator_ : address(0);
@@ -249,12 +260,10 @@ contract LeveredTreasury is ReentrancyGuard {
         if (block.timestamp > deadline) revert ProofExpired();
         if (creatorSubject != bytes32(0) && subject != creatorSubject) revert WrongAccount();
 
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(abi.encode(block.chainid, address(this), creatorHandle, subject, payout, deadline))
+        bool ok = IClaimVerifier(factory.claimVerifier()).isValid(
+            factory.claimSigner(), address(this), creatorHandle, subject, payout, deadline, proof
         );
-        // tryRecover so a malformed signature comes back as our own error rather than one from deep in the library.
-        (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, proof);
-        if (err != ECDSA.RecoverError.NoError || recovered != factory.claimSigner()) revert BadProof();
+        if (!ok) revert BadProof();
 
         if (creatorSubject == bytes32(0)) {
             creatorSubject = subject;

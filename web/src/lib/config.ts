@@ -212,6 +212,10 @@ export const orderFactoryAbi = [
  * What to call the current factory on a coin card. Each new factory is the next version, so this counts the legacy
  * ones rather than hard-coding a number that goes stale the next time we deploy.
  */
+/** Prices the creator's optional buy at launch. */
+export const LAUNCH_QUOTER = (process.env.NEXT_PUBLIC_LAUNCH_QUOTER ??
+  "0x2247e2d6F68cF5A8187FE8518fB7B1031D0a25FE") as Address;
+
 export const FACTORY_VERSION = process.env.NEXT_PUBLIC_FACTORY_VERSION ?? `v${LEGACY_FACTORIES.length + 1}`;
 
 /**

@@ -4,6 +4,9 @@ pragma solidity ^0.8.26;
 import {Script, console2} from "forge-std/Script.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {LeveredFactory} from "../src/LeveredFactory.sol";
+import {StakdTreasuryDeployer} from "../src/StakdTreasuryDeployer.sol";
+import {StakdClaimVerifier} from "../src/StakdClaimVerifier.sol";
+import {StakdLaunchQuoter, IStartTick} from "../src/StakdLaunchQuoter.sol";
 import {LeveredHook} from "../src/LeveredHook.sol";
 import {LeveredRouter} from "../src/LeveredRouter.sol";
 import {StakdCrossChainRouter} from "../src/StakdCrossChainRouter.sol";
@@ -63,6 +66,8 @@ contract DeployTestnet is Script {
         StakdCrossChainRouter xRouter =
             new StakdCrossChainRouter(POOL_MANAGER, ILeveredFactory(address(factory)), deployer);
 
+        factory.setTreasuryDeployer(address(new StakdTreasuryDeployer()));
+        factory.setClaimVerifier(address(new StakdClaimVerifier()));
         factory.setPeripherals(address(hook), address(router));
         factory.setCrosschainRouter(address(xRouter));
         factory.setKeeper(deployer, true);
@@ -70,8 +75,11 @@ contract DeployTestnet is Script {
         // The deployer stands in for the bridge composer during the rehearsal.
         xRouter.setTrustedSource(deployer, true);
 
+        StakdLaunchQuoter quoter = new StakdLaunchQuoter(IStartTick(address(factory)));
+
         vm.stopBroadcast();
 
+        console2.log("quoter       ", address(quoter));
         console2.log("chainId      ", block.chainid);
         console2.log("factory      ", address(factory));
         console2.log("hook         ", address(hook));

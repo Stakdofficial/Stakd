@@ -6,10 +6,18 @@ import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {LeveredFactory} from "../src/LeveredFactory.sol";
 import {LeveredToken} from "../src/LeveredToken.sol";
 import {LeveredTreasury} from "../src/LeveredTreasury.sol";
+import {StakdLaunchQuoter, IStartTick} from "../src/StakdLaunchQuoter.sol";
 import {LeveredTestBase} from "./Levered.t.sol";
 
 /// @notice The creator's own first buy, made inside the launch transaction so no bot can get there first.
 contract DevBuyTest is LeveredTestBase {
+    StakdLaunchQuoter quoter;
+
+    function setUp() public override {
+        super.setUp();
+        quoter = new StakdLaunchQuoter(IStartTick(address(factory)));
+    }
+
     function _params() internal view returns (LeveredFactory.CreateParams memory p) {
         p = LeveredFactory.CreateParams({
             name: "Dev Buy",
@@ -42,7 +50,7 @@ contract DevBuyTest is LeveredTestBase {
     }
 
     function test_theQuoteMatchesWhatTheyActuallyGet() public {
-        uint256 quoted = factory.quoteLaunchBuy(1 ether, FEE_BPS);
+        uint256 quoted = quoter.quoteLaunchBuy(1 ether, FEE_BPS);
         (LeveredToken tok,) = _launchWith(1 ether, 0);
         uint256 got = tok.balanceOf(creator);
         assertGt(quoted, 0);
@@ -50,14 +58,14 @@ contract DevBuyTest is LeveredTestBase {
     }
 
     function test_aBiggerBuyGetsMoreCoinsButAWorsePrice() public {
-        uint256 small = factory.quoteLaunchBuy(0.1 ether, FEE_BPS);
-        uint256 big = factory.quoteLaunchBuy(1 ether, FEE_BPS);
+        uint256 small = quoter.quoteLaunchBuy(0.1 ether, FEE_BPS);
+        uint256 big = quoter.quoteLaunchBuy(1 ether, FEE_BPS);
         assertGt(big, small, "more ETH buys more coins");
         assertLt(big, small * 10, "but ten times the ETH buys less than ten times the coins");
     }
 
     function test_theBoundIsRespected() public {
-        uint256 quoted = factory.quoteLaunchBuy(1 ether, FEE_BPS);
+        uint256 quoted = quoter.quoteLaunchBuy(1 ether, FEE_BPS);
         vm.expectRevert(); // asking for more than the pool can give
         _launchWith(1 ether, quoted * 2);
     }

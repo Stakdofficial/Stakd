@@ -6,9 +6,9 @@ import { decodeEventLog, formatUnits, parseEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { avgLeverage, Basket } from "@/components/Basket";
 import { ImagePicker } from "@/components/ImagePicker";
-import { factoryAbi, hookAbi } from "@/lib/abis";
+import { factoryAbi, hookAbi, launchQuoterAbi } from "@/lib/abis";
 import { profileLink } from "@/lib/links";
-import { chain, FACTORY, metadataAbi, metadataFor, TOKEN_DECIMALS } from "@/lib/config";
+import { chain, FACTORY, LAUNCH_QUOTER, metadataAbi, metadataFor, TOKEN_DECIMALS } from "@/lib/config";
 import { useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd, type LighterMarket } from "@/lib/lighter";
 
@@ -107,8 +107,8 @@ export default function CreatePage() {
   })();
 
   const devQuote = useReadContract({
-    address: FACTORY,
-    abi: factoryAbi,
+    address: LAUNCH_QUOTER,
+    abi: launchQuoterAbi,
     functionName: "quoteLaunchBuy",
     args: [devBuyWei, Math.round(feePct * 100)],
     query: { enabled: devBuyWei > 0n },
@@ -134,6 +134,9 @@ export default function CreatePage() {
             feeBps: Math.round(feePct * 100),
             // 2% of slippage room: the quote uses the lowest possible fee, the coin may charge more.
             minDevTokens: devTokens ? (devTokens * 90n) / 100n : 0n,
+            // Pointing the fee at a social handle is not exposed yet: the claim flow is not finished, so a coin
+            // launched that way would have fees nobody could collect.
+            creatorHandle: "",
           },
         ],
         value: devBuyWei,

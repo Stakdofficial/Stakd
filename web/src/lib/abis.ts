@@ -1482,6 +1482,11 @@ export const factoryAbi = [
             "name": "minDevTokens",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "creatorHandle",
+            "type": "string",
+            "internalType": "string"
           }
         ]
       }
@@ -1504,30 +1509,6 @@ export const factoryAbi = [
       }
     ],
     "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "quoteLaunchBuy",
-    "inputs": [
-      {
-        "name": "ethIn",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "feeBps",
-        "type": "uint16",
-        "internalType": "uint16"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "tokensOut",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
   }
 ] as const;
 
@@ -4384,4 +4365,18 @@ export const routerAbi = [
     "name": "UnknownCoin",
     "inputs": []
   }
+] as const;
+
+/** Prices a creator's buy at launch, before the coin exists. Lives outside the factory for contract size. */
+export const launchQuoterAbi = [
+  {
+    type: "function",
+    name: "quoteLaunchBuy",
+    stateMutability: "view",
+    inputs: [
+      { name: "ethIn", type: "uint256" },
+      { name: "feeBps", type: "uint16" },
+    ],
+    outputs: [{ name: "tokensOut", type: "uint256" }],
+  },
 ] as const;

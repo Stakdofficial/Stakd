@@ -226,6 +226,32 @@
  },
  {
   "type": "function",
+  "name": "claimSigner",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "claimVerifier",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "coin",
   "inputs": [
    {
@@ -408,6 +434,11 @@
       "name": "minDevTokens",
       "type": "uint256",
       "internalType": "uint256"
+     },
+     {
+      "name": "creatorHandle",
+      "type": "string",
+      "internalType": "string"
      }
     ]
    }
@@ -832,30 +863,6 @@
  },
  {
   "type": "function",
-  "name": "quoteLaunchBuy",
-  "inputs": [
-   {
-    "name": "ethIn",
-    "type": "uint256",
-    "internalType": "uint256"
-   },
-   {
-    "name": "feeBps",
-    "type": "uint16",
-    "internalType": "uint16"
-   }
-  ],
-  "outputs": [
-   {
-    "name": "tokensOut",
-    "type": "uint256",
-    "internalType": "uint256"
-   }
-  ],
-  "stateMutability": "view"
- },
- {
-  "type": "function",
   "name": "renounceOwnership",
   "inputs": [],
   "outputs": [],
@@ -873,6 +880,32 @@
    }
   ],
   "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "setClaimSigner",
+  "inputs": [
+   {
+    "name": "signer",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setClaimVerifier",
+  "inputs": [
+   {
+    "name": "verifier",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
  },
  {
   "type": "function",
@@ -1031,6 +1064,19 @@
  },
  {
   "type": "function",
+  "name": "setTreasuryDeployer",
+  "inputs": [
+   {
+    "name": "deployer",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
   "name": "stakdBurner",
   "inputs": [],
   "outputs": [
@@ -1070,6 +1116,19 @@
  },
  {
   "type": "function",
+  "name": "treasuryDeployer",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "unlockCallback",
   "inputs": [
    {
@@ -1086,6 +1145,19 @@
    }
   ],
   "stateMutability": "nonpayable"
+ },
+ {
+  "type": "event",
+  "name": "ClaimSignerSet",
+  "inputs": [
+   {
+    "name": "signer",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
  },
  {
   "type": "event",
