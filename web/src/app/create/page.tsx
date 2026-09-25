@@ -110,7 +110,7 @@ export default function CreatePage() {
     address: FACTORY,
     abi: factoryAbi,
     functionName: "quoteLaunchBuy",
-    args: [devBuyWei],
+    args: [devBuyWei, Math.round(feePct * 100)],
     query: { enabled: devBuyWei > 0n },
   });
 

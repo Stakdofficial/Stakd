@@ -17,14 +17,17 @@ contract LaunchCoin is Script {
         legs[1] = Leg({marketId: 1, isLong: true, weightBps: 3_000, leverageX10: 20}); // BTC
         legs[2] = Leg({marketId: 0, isLong: true, weightBps: 3_000, leverageX10: 20}); // ETH
 
+        uint256 devBuy = vm.envOr("DEV_BUY_WEI", uint256(0));
+        uint256 minDev = devBuy == 0 ? 0 : (factory.quoteLaunchBuy(devBuy, uint16(vm.envOr("COIN_FEE_BPS", uint256(200)))) * 90) / 100;
+
         vm.startBroadcast(pk);
         (uint256 id, address token, address treasury) =
-            factory.createCoin(LeveredFactory.CreateParams({
+            factory.createCoin{value: devBuy}(LeveredFactory.CreateParams({
             name: vm.envOr("COIN_NAME", string("Levered")),
             symbol: vm.envOr("COIN_SYMBOL", string("LVRD")),
             legs: legs,
             feeBps: uint16(vm.envOr("COIN_FEE_BPS", uint256(200))),
-            minDevTokens: 0
+            minDevTokens: minDev
         }));
         vm.stopBroadcast();
 

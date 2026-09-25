@@ -1513,6 +1513,11 @@ export const factoryAbi = [
         "name": "ethIn",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "outputs": [

@@ -42,23 +42,22 @@ contract DevBuyTest is LeveredTestBase {
     }
 
     function test_theQuoteMatchesWhatTheyActuallyGet() public {
-        uint256 quoted = factory.quoteLaunchBuy(1 ether);
+        uint256 quoted = factory.quoteLaunchBuy(1 ether, FEE_BPS);
         (LeveredToken tok,) = _launchWith(1 ether, 0);
         uint256 got = tok.balanceOf(creator);
         assertGt(quoted, 0);
-        // Within a tenth of a percent: the quote uses the coin's minimum fee, the swap uses its chosen one.
-        assertApproxEqRel(got, quoted, 0.02e18, "quote is close to the real fill");
+        assertApproxEqRel(got, quoted, 0.0001e18, "the quote is what they actually get");
     }
 
     function test_aBiggerBuyGetsMoreCoinsButAWorsePrice() public {
-        uint256 small = factory.quoteLaunchBuy(0.1 ether);
-        uint256 big = factory.quoteLaunchBuy(1 ether);
+        uint256 small = factory.quoteLaunchBuy(0.1 ether, FEE_BPS);
+        uint256 big = factory.quoteLaunchBuy(1 ether, FEE_BPS);
         assertGt(big, small, "more ETH buys more coins");
         assertLt(big, small * 10, "but ten times the ETH buys less than ten times the coins");
     }
 
     function test_theBoundIsRespected() public {
-        uint256 quoted = factory.quoteLaunchBuy(1 ether);
+        uint256 quoted = factory.quoteLaunchBuy(1 ether, FEE_BPS);
         vm.expectRevert(); // asking for more than the pool can give
         _launchWith(1 ether, quoted * 2);
     }

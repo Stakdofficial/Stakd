@@ -208,9 +208,9 @@ contract LeveredFactory is Ownable, IUnlockCallback {
         }
     }
 
-    /// @notice What a creator would receive for `ethIn` if they bought at launch. The pool starts identically for
-    ///         every coin, so this can be asked before the coin exists.
-    function quoteLaunchBuy(uint256 ethIn) external view returns (uint256 tokensOut) {
+    /// @notice What a creator would receive for `ethIn` if they bought at launch, at the fee they are choosing for
+    ///         the coin. The pool starts identically for every coin, so this can be asked before the coin exists.
+    function quoteLaunchBuy(uint256 ethIn, uint16 feeBps) external view returns (uint256 tokensOut) {
         if (ethIn == 0) return 0;
         int24 launchTick = -startTick;
         uint160 sqrtStart = TickMath.getSqrtPriceAtTick(launchTick);
@@ -219,8 +219,8 @@ contract LeveredFactory is Ownable, IUnlockCallback {
 
         // Buying the coin with ETH moves the price down through the range, so this is a zero-for-one swap. The
         // hook takes its fee out of the ETH before the swap, so quote on what actually reaches the pool.
-        uint256 feeBps = uint256(LeveredHook(payable(hook)).CREATOR_FEE_BPS()) + MIN_FEE_BPS;
-        uint256 intoPool = ethIn - (ethIn * feeBps) / 10_000;
+        uint256 total = uint256(LeveredHook(payable(hook)).CREATOR_FEE_BPS()) + feeBps;
+        uint256 intoPool = ethIn - (ethIn * total) / 10_000;
         uint160 sqrtAfter = SqrtPriceMath.getNextSqrtPriceFromInput(sqrtStart, liquidity, intoPool, true);
         tokensOut = SqrtPriceMath.getAmount1Delta(sqrtAfter, sqrtStart, liquidity, false);
     }
