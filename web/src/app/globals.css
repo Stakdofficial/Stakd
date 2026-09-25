@@ -2214,3 +2214,96 @@ body,
   background: var(--green);
   vertical-align: 1px;
 }
+
+/* ---------------------------------------------------------------- claim page */
+.claim-platforms {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.claim-platforms .chip,
+.claim-handles .chip,
+.claim-row-sub .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.claim-signin {
+  max-width: 520px;
+  margin: 0 auto 28px;
+  text-align: center;
+}
+
+.claim-signin h3 {
+  margin-bottom: 8px;
+}
+
+.claim-signin p {
+  margin-bottom: 18px;
+}
+
+.claim-steps {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.claim-who {
+  align-items: center;
+}
+
+.claim-handles {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.claim-total {
+  margin-bottom: 10px;
+}
+
+.claim-total strong {
+  display: block;
+  font-size: 22px;
+  color: var(--blue-600);
+}
+
+.claim-empty {
+  text-align: center;
+  padding: 40px 24px;
+}
+
+.claim-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.claim-amount {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.claim-eth {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .claim-who,
+  .claim-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .claim-amount {
+    align-items: flex-start;
+    text-align: left;
+  }
+}
