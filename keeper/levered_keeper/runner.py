@@ -28,7 +28,7 @@ from web3.logs import DISCARD
 
 from . import config as config_mod
 from .alerts import Alerter
-from .chain import Robinhood, from_usdg, to_eth, to_usdg
+from .chain import Robinhood, from_usdg, looks_unsupported, to_eth, to_usdg
 from .lighter_ops import LighterOps
 from .state import CoinState, State, Transfer
 from .strategy import Leg, close_all_orders, drawdown_breached, market_leverage_setting, rebalance_orders, take_profit
@@ -85,7 +85,11 @@ class Keeper:
                 self.alerts.send(f"coin:{key}", f"coin {coin['token']} failed: {e!r}"[:500])
             finally:
                 self.save()
-        self.burn_stakd()
+        try:
+            self.burn_stakd()
+        except Exception as e:
+            log.exception("the $STAKD burn failed")
+            self.alerts.send("stakd:burn", f"$STAKD burn failed: {e!r}"[:500])
 
     async def process_coin(self, cs: CoinState, markets, pool_id: bytes) -> None:
         treasury = self.chain.treasury(cs.treasury)
@@ -173,7 +177,10 @@ class Keeper:
             return
         try:
             pending = self.chain.hook.functions.pendingCrossChainFees(pool_id).call()
-        except Exception:
+        except Exception as e:
+            if not looks_unsupported(e):
+                log.warning("could not read the cross-chain bucket, retrying next tick: %r", e)
+                return
             # The hook of the original factory predates the cross-chain bucket. The ABI is shared between both
             # keepers, so only the call itself can tell them apart; stop asking once it has answered.
             self._no_crosschain_bucket = True
@@ -205,8 +212,12 @@ class Keeper:
             return
         try:
             pending = getattr(self.chain.hook.functions, f"pending{bucket}Fees")(pool_id).call()
-        except Exception:
-            # Older hooks have no such bucket; the ABI is shared, so only the call can tell. Stop asking once answered.
+        except Exception as e:
+            # Older hooks have no such bucket; the ABI is shared, so only the call can tell. Stop asking once
+            # answered — but a flaky connection is not an answer, so try again next tick instead.
+            if not looks_unsupported(e):
+                log.warning("could not read the %s bucket, retrying next tick: %r", bucket.lower(), e)
+                return
             self._missing_buckets.add(bucket)
             log.info("hook has no %s fee bucket; skipping those sweeps", bucket.lower())
             return
@@ -223,8 +234,12 @@ class Keeper:
             return
         try:
             burner = self.chain.stakd_burner()
-        except Exception:
+        except Exception as e:
             # Factories older than v4 have no burner; the ABI is shared, so only the call can tell them apart.
+            # A dropped connection is not an answer, though — retry next tick rather than giving up for good.
+            if not looks_unsupported(e):
+                log.warning("could not read the $STAKD burner, retrying next tick: %r", e)
+                return
             self._no_burner = True
             log.info("factory has no $STAKD burner; skipping those burns")
             return

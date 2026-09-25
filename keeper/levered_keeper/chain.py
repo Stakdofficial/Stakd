@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
+import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from eth_account import Account
@@ -41,6 +45,36 @@ def from_usdg(amount: float) -> int:
     return int(amount * 1e6)
 
 
+_NONCE_RACE = ("nonce too low", "nonce too high", "already known", "replacement transaction underpriced")
+
+
+# A contract that predates a feature answers a call for it with a revert or empty data. Anything else — a dropped
+# connection, a timeout, a bad gateway — is the node having a moment, and the feature is still there.
+_MISSING_FEATURE = ("execution reverted", "could not decode", "returned no data", "no data", "is not a function")
+
+
+def looks_unsupported(e: Exception) -> bool:
+    if type(e).__name__ in ("BadFunctionCallOutput", "ContractLogicError", "ABIFunctionNotFound", "MismatchedABI"):
+        return True
+    return any(m in str(e).lower() for m in _MISSING_FEATURE)
+
+
+def _is_nonce_race(e: Exception) -> bool:
+    return any(m in str(e).lower() for m in _NONCE_RACE)
+
+
+@contextmanager
+def _nonce_lock(address: str):
+    """Serialises nonce use across every keeper process on this machine, per signing wallet."""
+    path = Path(tempfile.gettempdir()) / f"stakd-nonce-{address.lower()}.lock"
+    with open(path, "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
 def _abi(name: str) -> list:
     return json.loads((ABI_DIR / f"{name}.json").read_text())
 
@@ -67,15 +101,28 @@ class Robinhood:
             log.info("[dry-run] %s", label)
             return "", None
         account = account or self.account
-        tx = fn.build_transaction(
-            {
-                "from": account.address,
-                "nonce": self.w3.eth.get_transaction_count(account.address, "pending"),
-                "chainId": ROBINHOOD_CHAIN_ID,
-            }
-        )
-        signed = account.sign_transaction(tx)
-        tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+        # One keeper runs per factory but they all sign with the same wallet, so two of them reading the nonce at
+        # the same moment would build two transactions with the same number and one would be thrown out. Taking the
+        # nonce and broadcasting under a lock shared by every keeper on this machine keeps them in single file.
+        for attempt in range(4):
+            try:
+                with _nonce_lock(account.address):
+                    tx = fn.build_transaction(
+                        {
+                            "from": account.address,
+                            "nonce": self.w3.eth.get_transaction_count(account.address, "pending"),
+                            "chainId": ROBINHOOD_CHAIN_ID,
+                        }
+                    )
+                    signed = account.sign_transaction(tx)
+                    tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+                break
+            except Exception as e:
+                # A nonce that raced anyway, or a duplicate: re-read it and try again rather than lose the tick.
+                if attempt == 3 or not _is_nonce_race(e):
+                    raise
+                log.info("%s hit a nonce race (%s), retrying", label, type(e).__name__)
+                time.sleep(0.5 * (attempt + 1))
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
         if receipt.status != 1:
             raise RuntimeError(f"{label} reverted: {tx_hash.to_0x_hex()}")

@@ -355,3 +355,100 @@ def test_a_paused_coin_keeps_its_place_in_state():
     asyncio.run(k.tick())
     # It never entered state this tick, so nothing was rewritten; its sub-account stays reserved on disk.
     assert "0xaaa" not in k.state.coins
+
+
+# --------------------------------------------------------------- the shared-wallet nonce race
+
+
+def test_nonce_race_errors_are_recognised():
+    from levered_keeper.chain import _is_nonce_race
+
+    assert _is_nonce_race(ValueError("{'code': -32000, 'message': 'nonce too low: address 0xE6a4, tx: 3838 state: 3839'}"))
+    assert _is_nonce_race(ValueError("already known"))
+    assert _is_nonce_race(ValueError("replacement transaction underpriced"))
+    assert not _is_nonce_race(ValueError("execution reverted: MarginCapReached"))
+    assert not _is_nonce_race(ValueError("insufficient funds for gas"))
+
+
+def test_the_nonce_lock_is_per_wallet_and_exclusive():
+    import os
+    from levered_keeper.chain import _nonce_lock
+
+    # Taking it twice in a row works; the point is that it is released, not held forever.
+    for _ in range(2):
+        with _nonce_lock("0xAbC"):
+            pass
+    # Two different wallets never block each other.
+    with _nonce_lock("0xAbC"):
+        with _nonce_lock("0xDeF"):
+            pass
+
+
+def test_a_failing_stakd_burn_does_not_kill_the_tick():
+    import asyncio
+
+    k = tick_keeper(COINS)
+
+    def boom():
+        raise RuntimeError("nonce too low")
+
+    k.burn_stakd = boom
+    sent = []
+    k.alerts = SimpleNamespace(send=lambda key, msg: sent.append(key))
+    asyncio.run(k.tick())
+    assert k.processed == ["0xAAA", "0xBBB"]  # every coin still ran
+    assert sent == ["stakd:burn"]  # and the failure was reported, not swallowed
+
+
+# --------------------------------------------------------------- a dropped connection is not an answer
+
+
+def test_only_a_revert_means_the_feature_is_missing():
+    from levered_keeper.chain import looks_unsupported
+
+    assert looks_unsupported(ValueError("execution reverted"))
+    assert looks_unsupported(ValueError("Could not decode contract function call"))
+    # Transport trouble says nothing about whether the contract has the function.
+    assert not looks_unsupported(ConnectionError("Connection aborted., ConnectionResetError(54, 'Connection reset by peer')"))
+    assert not looks_unsupported(TimeoutError("read timed out"))
+    assert not looks_unsupported(ValueError("502 Bad Gateway"))
+
+
+def test_a_dropped_connection_does_not_disable_the_bucket_for_good():
+    hook = FakeHook(defend_pending=WEI // 100)
+
+    calls = {"n": 0}
+
+    def flaky(pool_id):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return Call(error=ConnectionError("Connection reset by peer"))
+        return Call(WEI // 100)
+
+    hook.pendingDefendFees = flaky
+    k = keeper_with(hook)
+    k.collect_defend_fees(POOL)          # connection drops
+    assert k._missing_buckets == set()   # not written off
+    assert k.chain.sent == []
+    k.collect_defend_fees(POOL)          # next tick works
+    assert [name for name, _ in k.chain.sent] == ["collectDefendFees"]
+
+
+def test_a_dropped_connection_does_not_disable_the_stakd_burn_for_good():
+    burner = FakeBurner()
+    chain = BurnerChain(FakeHook(), burner, balance=WEI // 10, quote=1_000_000)
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ConnectionError("Connection reset by peer")
+        return burner
+
+    chain.stakd_burner = flaky
+    k = burner_keeper(chain)
+    k.burn_stakd()
+    assert k._no_burner is False   # it will try again
+    assert k.chain.sent == []
+    k.burn_stakd()
+    assert [name for name, _ in k.chain.sent] == ["burn"]
