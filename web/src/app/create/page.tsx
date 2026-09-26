@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import { decodeEventLog, formatUnits, parseEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { avgLeverage, Basket } from "@/components/Basket";
+import { DcLogo, GhLogo, WalletLogo, XLogo } from "@/components/BrandLogos";
 import { ImagePicker } from "@/components/ImagePicker";
 import { factoryAbi, hookAbi, launchQuoterAbi } from "@/lib/abis";
 import { profileLink } from "@/lib/links";
@@ -15,6 +16,19 @@ import { formatUsd, type LighterMarket } from "@/lib/lighter";
 type DraftLeg = { marketId: number; isLong: boolean; weight: number; leverage: number };
 
 const MAX_LEGS = 6;
+// Where a coin's 1% creator fee can be pointed.
+type FeeTarget = "me" | "x" | "github" | "discord";
+const FEE_TARGETS: { key: FeeTarget; label: string; Icon: (p: { s?: number }) => ReactElement }[] = [
+  { key: "me", label: "Me", Icon: WalletLogo },
+  { key: "x", label: "X", Icon: XLogo },
+  { key: "github", label: "GitHub", Icon: GhLogo },
+  { key: "discord", label: "Discord", Icon: DcLogo },
+];
+const FEE_ICONS: Partial<Record<FeeTarget, (p: { s?: number }) => ReactElement>> = {
+  x: XLogo,
+  github: GhLogo,
+  discord: DcLogo,
+};
 // Lighter's Robinhood exchange market ids.
 const DEFAULT_LEGS: DraftLeg[] = [
   { marketId: 26, isLong: true, weight: 40, leverage: 2 }, // SPY
@@ -36,7 +50,7 @@ export default function CreatePage() {
   // The creator's own first buy, made in the launch transaction itself.
   const [devBuy, setDevBuy] = useState("");
   // Point the 1% at someone's social account instead of your own wallet.
-  const [feePlatform, setFeePlatform] = useState<"me" | "x" | "github" | "discord">("me");
+  const [feePlatform, setFeePlatform] = useState<FeeTarget>("me");
   const [feeHandle, setFeeHandle] = useState("");
   const creatorHandle =
     feePlatform === "me" || !feeHandle.trim() ? "" : `${feePlatform}:${feeHandle.trim().replace(/^@/, "").toLowerCase()}`;
@@ -392,26 +406,31 @@ export default function CreatePage() {
           </div>
           <div>
             <label className="label">Who gets the 1% creator fee</label>
-            <div className="toggle" style={{ width: "100%", marginBottom: 10 }}>
-              {(["me", "x", "github", "discord"] as const).map((k) => (
-                <button key={k} className={feePlatform === k ? "on" : ""} onClick={() => setFeePlatform(k)}>
-                  {k === "me" ? "Me" : k === "x" ? "X" : k === "github" ? "GitHub" : "Discord"}
+            <div className="toggle grid2" style={{ width: "100%", marginBottom: 10 }}>
+              {FEE_TARGETS.map(({ key, label, Icon }) => (
+                <button key={key} className={feePlatform === key ? "on" : ""} onClick={() => setFeePlatform(key)}>
+                  <Icon s={14} />
+                  {label}
                 </button>
               ))}
             </div>
             {feePlatform !== "me" && (
-              <input
-                placeholder={feePlatform === "discord" ? "username" : "@username"}
-                value={feeHandle}
-                onChange={(e) => setFeeHandle(e.target.value.replace(/[^A-Za-z0-9_.@-]/g, ""))}
-              />
+              <div className="field">
+                <span className="field-prefix">{FEE_ICONS[feePlatform]?.({ s: 15 })}</span>
+                <input
+                  className="input"
+                  style={{ paddingLeft: 36 }}
+                  placeholder={feePlatform === "discord" ? "username" : "@username"}
+                  value={feeHandle}
+                  onChange={(e) => setFeeHandle(e.target.value.replace(/[^A-Za-z0-9_.@-]/g, ""))}
+                />
+              </div>
             )}
             <div className="muted small">
               {creatorHandle ? (
                 <>
-                  Every trade pays <strong>{creatorHandle}</strong> 1% in ETH. You keep none of it. They claim it by
-                  signing in with that account — if they never do, it stays in the coin&apos;s treasury forever and
-                  nobody can take it.
+                  Every trade pays <strong>{creatorHandle}</strong> 1% in ETH — you keep none of it. They claim it by
+                  signing in with that account; until then it waits in the coin&apos;s treasury.
                 </>
               ) : (
                 "By default the 1% comes to your wallet. You can point it at someone else's account instead."
@@ -420,12 +439,17 @@ export default function CreatePage() {
           </div>
           <div>
             <label className="label">Buy your own coin at launch (optional)</label>
-            <input
-              inputMode="decimal"
-              placeholder="0.0 ETH"
-              value={devBuy}
-              onChange={(e) => setDevBuy(e.target.value.replace(/[^0-9.]/g, ""))}
-            />
+            <div className="field">
+              <input
+                className="input"
+                style={{ paddingRight: 48 }}
+                inputMode="decimal"
+                placeholder="0.0"
+                value={devBuy}
+                onChange={(e) => setDevBuy(e.target.value.replace(/[^0-9.]/g, ""))}
+              />
+              <span className="field-suffix">ETH</span>
+            </div>
             <div className="muted small">
               {devBuyWei > 0n && devTokens ? (
                 <>

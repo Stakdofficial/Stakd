@@ -516,6 +516,56 @@ input[type="range"] {
   color: var(--blue-600);
 }
 
+/* Four options need two rows, so the control grows instead of overflowing. */
+.toggle.grid2 {
+  grid-template-columns: 1fr 1fr;
+  height: auto;
+  gap: 3px;
+}
+
+.toggle.grid2 button {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.toggle.grid2 button svg {
+  flex: none;
+  opacity: 0.7;
+}
+
+.toggle.grid2 button.on svg {
+  opacity: 1;
+}
+
+/* An input with a logo or a unit sitting inside it. */
+.field {
+  position: relative;
+}
+
+.field-prefix,
+.field-suffix {
+  position: absolute;
+  top: 0;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.field-prefix {
+  left: 12px;
+}
+
+.field-suffix {
+  right: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .icon-btn {
   width: 36px;
   height: 42px;
