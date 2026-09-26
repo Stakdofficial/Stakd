@@ -5,31 +5,23 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { formatUnits, type Address } from "viem";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { DcLogo, GhLogo, LOGOS, TgLogo, XLogo } from "@/components/BrandLogos";
 import { treasuryAbi } from "@/lib/abis";
-import { ETH_DECIMALS, explorerAddress } from "@/lib/config";
+import { ETH_DECIMALS, explorerAddress, TELEGRAM_ENABLED } from "@/lib/config";
 import { useCoins, useEthPrice, type CoinSummary } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 
 /** Privy's names for the accounts someone can log in with, mapped to the prefixes coins are launched with. */
-const PLATFORMS: Record<string, string> = { twitter_oauth: "x", github_oauth: "github", discord_oauth: "discord" };
+const PLATFORMS: Record<string, string> = {
+  twitter_oauth: "x",
+  github_oauth: "github",
+  discord_oauth: "discord",
+  telegram: "telegram",
+};
 const ZERO = "0x0000000000000000000000000000000000000000";
+/** Only name Telegram once it is really switched on, so we never invite a login that does not exist. */
+const PLATFORM_LIST = TELEGRAM_ENABLED ? "X, GitHub, Discord or Telegram" : "X, GitHub or Discord";
 
-const XLogo = ({ s = 20 }: { s?: number }) => (
-  <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-    <path d="M17.8 3h3.1l-6.8 7.8L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.3-8.3L1.8 3h6.4l4.4 5.8L17.8 3Zm-1.1 16.2h1.7L7.3 4.7H5.5l11.2 14.5Z" />
-  </svg>
-);
-const GhLogo = ({ s = 20 }: { s?: number }) => (
-  <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-    <path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.9 10.9c.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.1.1 1.7 1.2 1.7 1.2 1 1.7 2.7 1.2 3.3.9.1-.7.4-1.2.7-1.5-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .4.2.7.8.6A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z" />
-  </svg>
-);
-const DcLogo = ({ s = 20 }: { s?: number }) => (
-  <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-    <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.3.5c1.7.4 2.9 1 4 1.7a14.3 14.3 0 0 0-12.2 0c1.1-.7 2.4-1.3 4-1.7L10.6 3a19.8 19.8 0 0 0-4.9 1.4C2.6 9 1.8 13.5 2.2 17.9a19.9 19.9 0 0 0 6 3c.5-.7.9-1.4 1.3-2.2-.7-.3-1.4-.6-2-1l.5-.4a14.2 14.2 0 0 0 12.1 0l.5.4c-.6.4-1.3.7-2 1 .4.8.8 1.5 1.3 2.2a19.8 19.8 0 0 0 6-3c.5-5.1-.8-9.6-3.6-13.5ZM8.7 15.2c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4 1.2 0 2.2 1.1 2.1 2.4 0 1.3-.9 2.4-2.1 2.4Zm6.6 0c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4 1.2 0 2.2 1.1 2.1 2.4 0 1.3-.9 2.4-2.1 2.4Z" />
-  </svg>
-);
-const LOGOS: Record<string, (p: { s?: number }) => React.ReactElement> = { x: XLogo, github: GhLogo, discord: DcLogo };
 
 type Claimable = { coin: CoinSummary; handle: string; owed: bigint; bound: boolean };
 
@@ -110,13 +102,16 @@ export default function ClaimPage() {
           Someone launched a coin <span>for you</span>
         </h1>
         <p>
-          Anyone on Stakd can point a coin&apos;s 1% creator fee at your X, GitHub or Discord account. It piles up from
-          the first trade whether you know about it or not. Sign in to collect it.
+          Anyone on Stakd can point a coin&apos;s 1% creator fee at your {PLATFORM_LIST} account. It piles up from the
+          first trade whether you know about it or not. Sign in to collect it.
         </p>
         <div className="claim-platforms">
           <span className="chip"><XLogo s={15} /> X</span>
           <span className="chip"><GhLogo s={15} /> GitHub</span>
           <span className="chip"><DcLogo s={15} /> Discord</span>
+          {TELEGRAM_ENABLED && (
+            <span className="chip"><TgLogo s={15} /> Telegram</span>
+          )}
         </div>
       </section>
 
@@ -131,7 +126,7 @@ export default function ClaimPage() {
               don&apos;t have one.
             </p>
             <button className="btn btn-primary btn-block" onClick={login}>
-              Continue with X, GitHub or Discord
+              Continue with {PLATFORM_LIST}
             </button>
           </div>
           <div className="steps claim-steps">

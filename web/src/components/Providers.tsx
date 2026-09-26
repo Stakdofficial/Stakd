@@ -4,7 +4,7 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { WagmiProvider, createConfig, http, injected } from "wagmi";
-import { chain } from "@/lib/config";
+import { chain, TELEGRAM_ENABLED } from "@/lib/config";
 
 const wagmiConfig = createConfig({
   chains: [chain],
@@ -22,6 +22,8 @@ export function Providers({ children }: { children: ReactNode }) {
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </WagmiProvider>
   );
+  // Telegram only works once it is switched on in the Privy dashboard. Offering it before that would let people
+  // point a fee at a Telegram handle nobody can ever prove they own, so it stays off until the flag is set.
   // Privy is only needed to prove someone owns an X, GitHub or Discord account when claiming creator fees.
   // Without an app id configured the rest of the site still works; only the claim page goes quiet.
   if (!PRIVY_APP_ID) return inner;
@@ -29,7 +31,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
-        loginMethods: ["twitter", "github", "discord", "wallet"],
+        loginMethods: ["twitter", "github", "discord", ...(TELEGRAM_ENABLED ? (["telegram"] as const) : []), "wallet"],
         embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" } },
         appearance: { theme: "light", accentColor: "#2563eb", logo: undefined },
       }}

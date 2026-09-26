@@ -16,9 +16,20 @@ import { chain } from "@/lib/config";
 const CLAIM_TTL_SECONDS = 15 * 60;
 
 /** Privy calls them "twitter"/"github"/"discord"; coins are launched with our own shorter prefixes. */
-const PLATFORMS: Record<string, string> = { x: "twitter_oauth", github: "github_oauth", discord: "discord_oauth" };
+const PLATFORMS: Record<string, string> = {
+  x: "twitter_oauth",
+  github: "github_oauth",
+  discord: "discord_oauth",
+  telegram: "telegram",
+};
 
-type LinkedAccount = { type: string; subject?: string; username?: string };
+type LinkedAccount = { type: string; subject?: string; username?: string; telegramUserId?: string | number };
+
+/** The OAuth logins carry their immutable id as `subject`; Telegram calls the same thing `telegramUserId`. */
+function accountId(a: LinkedAccount): string | undefined {
+  const id = a.subject ?? a.telegramUserId;
+  return id === undefined || id === null || id === "" ? undefined : String(id);
+}
 
 export async function POST(req: Request) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
@@ -48,7 +59,10 @@ export async function POST(req: Request) {
   const username = handle.slice(sep + 1).toLowerCase();
   const privyType = PLATFORMS[platform];
   if (sep < 0 || !privyType || !username) {
-    return NextResponse.json({ error: "Handle must look like x:name, github:name or discord:name." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Handle must look like x:name, github:name, discord:name or telegram:name." },
+      { status: 400 },
+    );
   }
 
   const privy = new PrivyClient(appId, appSecret);
@@ -64,7 +78,8 @@ export async function POST(req: Request) {
   const account = (user.linkedAccounts as LinkedAccount[]).find(
     (a) => a.type === privyType && (a.username ?? "").toLowerCase() === username,
   );
-  if (!account?.subject) {
+  const id = account ? accountId(account) : undefined;
+  if (!id) {
     return NextResponse.json(
       { error: `You are not signed in as ${handle}. Log in with that account to claim it.` },
       { status: 403 },
@@ -72,7 +87,7 @@ export async function POST(req: Request) {
   }
 
   // The platform's own id for the account, not the username: usernames get renamed and recycled, ids do not.
-  const subject = keccak256(new TextEncoder().encode(`${platform}:${account.subject}`));
+  const subject = keccak256(new TextEncoder().encode(`${platform}:${id}`));
   const deadline = BigInt(Math.floor(Date.now() / 1000) + CLAIM_TTL_SECONDS);
 
   const digest = keccak256(

@@ -314,3 +314,6 @@ export const HIDDEN_COINS = new Set(
 export function isHiddenCoin(token: string) {
   return HIDDEN_COINS.has(token.toLowerCase());
 }
+
+/** Telegram creator-fee targets, gated until Telegram is enabled in the Privy dashboard. */
+export const TELEGRAM_ENABLED = process.env.NEXT_PUBLIC_PRIVY_TELEGRAM === "1";

@@ -5,11 +5,11 @@ import { type ReactElement, useMemo, useState } from "react";
 import { decodeEventLog, formatUnits, parseEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { avgLeverage, Basket } from "@/components/Basket";
-import { DcLogo, GhLogo, WalletLogo, XLogo } from "@/components/BrandLogos";
+import { DcLogo, GhLogo, TgLogo, WalletLogo, XLogo } from "@/components/BrandLogos";
 import { ImagePicker } from "@/components/ImagePicker";
 import { factoryAbi, hookAbi, launchQuoterAbi } from "@/lib/abis";
 import { profileLink } from "@/lib/links";
-import { chain, FACTORY, LAUNCH_QUOTER, metadataAbi, metadataFor, TOKEN_DECIMALS } from "@/lib/config";
+import { chain, FACTORY, LAUNCH_QUOTER, metadataAbi, metadataFor, TELEGRAM_ENABLED, TOKEN_DECIMALS } from "@/lib/config";
 import { useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd, type LighterMarket } from "@/lib/lighter";
 
@@ -17,17 +17,21 @@ type DraftLeg = { marketId: number; isLong: boolean; weight: number; leverage: n
 
 const MAX_LEGS = 6;
 // Where a coin's 1% creator fee can be pointed.
-type FeeTarget = "me" | "x" | "github" | "discord";
-const FEE_TARGETS: { key: FeeTarget; label: string; Icon: (p: { s?: number }) => ReactElement }[] = [
+type FeeTarget = "me" | "x" | "github" | "discord" | "telegram";
+type FeeTargetOption = { key: FeeTarget; label: string; Icon: (p: { s?: number }) => ReactElement };
+const ALL_FEE_TARGETS: FeeTargetOption[] = [
   { key: "me", label: "Me", Icon: WalletLogo },
   { key: "x", label: "X", Icon: XLogo },
   { key: "github", label: "GitHub", Icon: GhLogo },
   { key: "discord", label: "Discord", Icon: DcLogo },
+  { key: "telegram", label: "Telegram", Icon: TgLogo },
 ];
+const FEE_TARGETS = ALL_FEE_TARGETS.filter((t) => t.key !== "telegram" || TELEGRAM_ENABLED);
 const FEE_ICONS: Partial<Record<FeeTarget, (p: { s?: number }) => ReactElement>> = {
   x: XLogo,
   github: GhLogo,
   discord: DcLogo,
+  telegram: TgLogo,
 };
 // Lighter's Robinhood exchange market ids.
 const DEFAULT_LEGS: DraftLeg[] = [

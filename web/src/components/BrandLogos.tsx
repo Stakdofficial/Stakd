@@ -19,6 +19,12 @@ export const DcLogo = ({ s = 20 }: { s?: number }) => (
   </svg>
 );
 
+export const TgLogo = ({ s = 20 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M12 0a12 12 0 1 0 0 24 12 12 0 0 0 0-24Zm5.6 8.2-1.9 8.8c-.14.63-.51.79-1.04.49l-2.87-2.12-1.39 1.33c-.15.15-.28.29-.58.29l.2-2.93 5.33-4.81c.23-.2-.05-.32-.36-.12l-6.59 4.14-2.84-.89c-.61-.19-.63-.61.13-.91l11.1-4.28c.51-.19.96.12.8.91Z" />
+  </svg>
+);
+
 /** A wallet, for the "the fee just comes to me" option. */
 export const WalletLogo = ({ s = 20 }: { s?: number }) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -30,4 +36,5 @@ export const LOGOS: Record<string, (p: { s?: number }) => React.ReactElement> = 
   x: XLogo,
   github: GhLogo,
   discord: DcLogo,
+  telegram: TgLogo,
 };
