@@ -14,7 +14,7 @@ import { CoinActivity } from "@/components/CoinActivity";
 import { useQuery } from "@tanstack/react-query";
 import { profileLink, xHandle } from "@/lib/links";
 import { factoryAbi, hookAbi, routerAbi, tokenAbi, treasuryAbi } from "@/lib/abis";
-import { burnerFor, chain, erc20Abi, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, orderFactoryFor, POOL_MANAGER, poolManagerAbi, quoterAbi, stakdBurnerAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
+import { burnerFor, chain, erc20Abi, TOTAL_SUPPLY, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, orderFactoryFor, POOL_MANAGER, poolManagerAbi, quoterAbi, stakdBurnerAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
 import { useCoinFactory, useEthPrice, useLighterAccount, useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 import { decodePoolState, ethPerToken, POOL_STATE_SLOTS, poolStateSlot, sqrtPriceFromSlots } from "@/lib/pool";
@@ -102,6 +102,10 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
     info.data as unknown as [
       string, string, bigint, readonly [Address, number], readonly Leg[], bigint, bigint, bigint, bigint, bigint, boolean, bigint, bigint, readonly `0x${string}`[],
     ];
+  // Every coin mints exactly TOTAL_SUPPLY and can only ever burn, so supply missing from it is supply burned —
+  // whoever burned it. Adding the treasury's own count to one burner missed $STAKD's other burners, and would
+  // have gone stale again with every new factory.
+  const burnedTotal = TOTAL_SUPPLY > supply ? TOTAL_SUPPLY - supply : 0n;
   const feeBps = poolInfo[1];
   const pool = decodePoolState(slots, false); // native ETH is always currency0
   const legs = legsRaw.map((l) => ({ ...l }));
@@ -243,7 +247,7 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
           <Stat k="Margin sent to Lighter" v={ethStr(bridged) + usd(bridged)} />
           <Stat k="Waiting for Lighter" v={ethStr(reserve) + usd(reserve)} />
           <Stat k="Bought back" v={ethStr(bought) + usd(bought)} />
-          <Stat k="Burned" v={`${compact((burned ?? 0n) + (burnerBurned.data ?? 0n))} ${symbol}`} />
+          <Stat k="Burned" v={`${compact(burnedTotal)} ${symbol}`} />
           <Stat k="Fees waiting to collect" v={ethStr(pendingFees) + usd(pendingFees)} />
           {creatorPaid.data !== undefined && <Stat k="Earned by creator (1%)" v={ethStr(creatorPaid.data) + usd(creatorPaid.data)} />}
         </div>

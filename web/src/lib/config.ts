@@ -226,6 +226,9 @@ export const FACTORY_VERSION = process.env.NEXT_PUBLIC_FACTORY_VERSION ?? `v${LE
  * StakdBurner burns it too: half of every other coin's volatility fee is sent there, spent on $STAKD and destroyed.
  * The burner is not a treasury, so anything counting $STAKD burns has to ask it as well.
  */
+/** Every Stakd coin mints exactly this and can only ever burn, so supply missing from it is supply burned. */
+export const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n;
+
 export const STAKD_TOKEN = (process.env.NEXT_PUBLIC_STAKD_TOKEN ??
   "0x2854Cf9f6C3DF1eEdCa72CD141e282AC167d1E6A") as Address;
 export const STAKD_BURNER = (process.env.NEXT_PUBLIC_STAKD_BURNER ??

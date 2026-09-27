@@ -4,7 +4,7 @@ import { formatUnits, parseAbiItem, type Address } from "viem";
 import { usePublicClient, useReadContracts } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { ETH_DECIMALS, explorerTx, TOKEN_DECIMALS, STAKD_BURNER, STAKD_TOKEN, stakdBurnerAbi } from "@/lib/config";
+import { ETH_DECIMALS, explorerTx, TOKEN_DECIMALS, TOTAL_SUPPLY, STAKD_BURNER, STAKD_TOKEN, stakdBurnerAbi } from "@/lib/config";
 import { useCoins, useEthPrice, type CoinSummary } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 
@@ -96,11 +96,13 @@ export default function BurnsPage() {
   // Supply burned is per coin, so totals are shown per coin rather than added together.
   const perCoin = list
     .map((c: CoinSummary) => {
-      const viaBurner = c.token.toLowerCase() === STAKD_TOKEN.toLowerCase() ? (burnerTotals.data?.[0] ?? 0n) : 0n;
+      // Supply missing from the mint is supply burned, whoever burned it. $STAKD is burned by several burners
+      // as well as by its own treasury, and summing those sources kept missing some.
+      const burned = c.totalSupply < TOTAL_SUPPLY ? TOTAL_SUPPLY - c.totalSupply : 0n;
       const viaBurnerEth = c.token.toLowerCase() === STAKD_TOKEN.toLowerCase() ? (burnerTotals.data?.[1] ?? 0n) : 0n;
       return {
         coin: c,
-        burned: Number(formatUnits(c.totalTokensBurned + viaBurner, TOKEN_DECIMALS)),
+        burned: Number(formatUnits(burned, TOKEN_DECIMALS)),
         eth: Number(formatUnits(c.totalBuybackEth + viaBurnerEth, ETH_DECIMALS)),
       };
     })
@@ -148,7 +150,7 @@ export default function BurnsPage() {
                     <td className="mono">{burned.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 2 })}</td>
                     {/* Burning shrinks totalSupply, so measure against what the coin started with, not what is left. */}
                     <td className="mono">
-                      {((burned / (Number(formatUnits(coin.totalSupply, TOKEN_DECIMALS)) + burned)) * 100).toFixed(3)}%
+                      {((burned / Number(formatUnits(TOTAL_SUPPLY, TOKEN_DECIMALS))) * 100).toFixed(3)}%
                     </td>
                     <td className="mono">{eth.toLocaleString("en-US", { maximumFractionDigits: 5 })}</td>
                   </tr>
