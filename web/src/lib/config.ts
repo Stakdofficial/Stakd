@@ -26,6 +26,9 @@ export const robinhood = defineChain({
     },
   },
   blockExplorers: { default: { name: "Blockscout", url: "https://robinhoodchain.blockscout.com" } },
+  // Without this every read is its own request: the coin list alone is ~10 calls per coin, which buries the
+  // RPC proxy once there are a few dozen coins. Multicall3 is at the usual address on Robinhood Chain.
+  contracts: { multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" } },
 });
 
 export const chain = robinhood;

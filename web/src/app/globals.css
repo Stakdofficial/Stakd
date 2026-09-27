@@ -2362,3 +2362,40 @@ body,
     text-align: left;
   }
 }
+
+/* ---------------------------------------------------------------- copy address */
+.copy-addr {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  margin: 0 -2px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--blue-50);
+  color: var(--blue-600);
+  font: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.copy-addr:hover {
+  background: var(--blue-100);
+  border-color: var(--border-strong);
+}
+
+.copy-addr:active {
+  transform: translateY(1px);
+}
+
+.copy-addr-said {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.copy-addr-said:empty {
+  display: none;
+}

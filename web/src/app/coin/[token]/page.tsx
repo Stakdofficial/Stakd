@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { formatUnits, isAddress, parseUnits, type Address } from "viem";
 import { useAccount, useBalance, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
+import { CopyAddress } from "@/components/CopyAddress";
 import { avgLeverage, Basket, legLabel } from "@/components/Basket";
 import { ImagePicker } from "@/components/ImagePicker";
 import { PriceCurve } from "@/components/PriceCurve";
@@ -144,9 +145,10 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1>{name}</h1>
             <div className="muted">
-              ${symbol} ·{" "}
-              <a href={explorerAddress(token)} target="_blank" rel="noreferrer" className="mono" style={{ color: "var(--blue-600)" }}>
-                {token.slice(0, 6)}…{token.slice(-4)}
+              ${symbol} · <CopyAddress address={token} label={`Copy ${symbol} contract address`} />
+              {" · "}
+              <a href={explorerAddress(token)} target="_blank" rel="noreferrer" style={{ color: "var(--blue-600)", fontWeight: 600 }}>
+                Explorer
               </a>
               {socials.map((l) => (
                 <span key={l.label}>

@@ -1,42 +1,32 @@
 "use client";
 
-import { PrivyProvider } from "@privy-io/react-auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { WagmiProvider, createConfig, http, injected } from "wagmi";
-import { chain, TELEGRAM_ENABLED } from "@/lib/config";
+import { chain } from "@/lib/config";
 
 const wagmiConfig = createConfig({
   chains: [chain],
   connectors: [injected()],
-  transports: { [chain.id]: http() } as Record<typeof chain.id, ReturnType<typeof http>>,
+  // Batch the JSON-RPC calls too, so what multicall cannot fold into one call still travels together.
+  transports: { [chain.id]: http(undefined, { batch: { wait: 24 } }) } as Record<typeof chain.id, ReturnType<typeof http>>,
+  batch: { multicall: { batchSize: 2_048, wait: 24 } },
   ssr: true,
 });
 
-const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
-
+/**
+ * Chain access for the whole site.
+ *
+ * Privy deliberately is not here. It is only needed to prove someone owns a social account when claiming a
+ * creator fee, and while it sat at the root its start-up could stall every read on every page — the coin list
+ * hung on "Loading coins…" site-wide because wagmi never issued a single request. It now wraps the claim page
+ * alone (see app/claim/layout.tsx), so a slow or broken third-party login can never take the site down again.
+ */
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
-  const inner = (
+  return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </WagmiProvider>
-  );
-  // Telegram only works once it is switched on in the Privy dashboard. Offering it before that would let people
-  // point a fee at a Telegram handle nobody can ever prove they own, so it stays off until the flag is set.
-  // Privy is only needed to prove someone owns an X, GitHub or Discord account when claiming creator fees.
-  // Without an app id configured the rest of the site still works; only the claim page goes quiet.
-  if (!PRIVY_APP_ID) return inner;
-  return (
-    <PrivyProvider
-      appId={PRIVY_APP_ID}
-      config={{
-        loginMethods: ["twitter", "github", "discord", ...(TELEGRAM_ENABLED ? (["telegram"] as const) : []), "wallet"],
-        embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" } },
-        appearance: { theme: "light", accentColor: "#2563eb", logo: undefined },
-      }}
-    >
-      {inner}
-    </PrivyProvider>
   );
 }
