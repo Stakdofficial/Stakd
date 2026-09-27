@@ -38,6 +38,13 @@ log = logging.getLogger("levered.keeper")
 RESET_MARK = -1.0  # high-water mark sentinel: adopt current equity on the next tick (set by `resume`)
 
 
+# Treasuries deployed before v6 bind with the index alone; v6 takes the Lighter account owner as well.
+_LEGACY_SET_LIGHTER_ABI = [{
+    "type": "function", "name": "setLighterAccount", "stateMutability": "nonpayable",
+    "inputs": [{"name": "accountIndex", "type": "uint64"}], "outputs": [],
+}]
+
+
 class Keeper:
     def __init__(self, cfg: config_mod.Config):
         self.cfg = cfg
@@ -144,10 +151,17 @@ class Keeper:
             # index alone and read the owner from their own config.
             owner = self.lighter.l1_address
             try:
+                # `lighterOwner` exists only from v6, where the coin stores its own Lighter account owner.
+                treasury.functions.lighterOwner().call()
                 call = treasury.functions.setLighterAccount(cs.sub_account_index, owner)
+                what = f"setLighterAccount {cs.sub_account_index} on {owner}"
             except Exception:
-                call = treasury.functions.setLighterAccount(cs.sub_account_index)
-            self.chain.send(call, f"setLighterAccount {cs.sub_account_index} on {owner}")
+                # Older treasuries take the index alone and read the owner from their factory's config. The
+                # shared ABI only carries the newer two-argument form, so build this one by hand.
+                legacy = self.chain.contract(treasury.address, _LEGACY_SET_LIGHTER_ABI)
+                call = legacy.functions.setLighterAccount(cs.sub_account_index)
+                what = f"setLighterAccount {cs.sub_account_index} (pre-v6 treasury)"
+            self.chain.send(call, what)
 
     def sub_accounts_in_use(self) -> set[int]:
         """Sub-accounts claimed by any coin, in keeper state or bound on-chain — this factory's coins and those of
