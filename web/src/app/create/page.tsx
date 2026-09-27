@@ -5,11 +5,12 @@ import { type ReactElement, useMemo, useState } from "react";
 import { decodeEventLog, formatUnits, parseEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { avgLeverage, Basket } from "@/components/Basket";
-import { DcLogo, GhLogo, TgLogo, WalletLogo, XLogo } from "@/components/BrandLogos";
+import { DcLogo, FomoLogo, GhLogo, TgLogo, WalletLogo, XLogo } from "@/components/BrandLogos";
 import { ImagePicker } from "@/components/ImagePicker";
-import { factoryAbi, hookAbi, launchQuoterAbi } from "@/lib/abis";
+import { factoryAbi, hookAbi, launchQuoterAbi, treasuryAbi } from "@/lib/abis";
+import { fomoHandle } from "@/lib/fomo";
 import { profileLink } from "@/lib/links";
-import { chain, FACTORY, LAUNCH_QUOTER, metadataAbi, metadataFor, TELEGRAM_ENABLED, TOKEN_DECIMALS } from "@/lib/config";
+import { chain, FACTORY, FOMO_ENABLED, LAUNCH_QUOTER, metadataAbi, metadataFor, TELEGRAM_ENABLED, TOKEN_DECIMALS } from "@/lib/config";
 import { useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd, type LighterMarket } from "@/lib/lighter";
 
@@ -17,7 +18,7 @@ type DraftLeg = { marketId: number; isLong: boolean; weight: number; leverage: n
 
 const MAX_LEGS = 6;
 // Where a coin's 1% creator fee can be pointed.
-type FeeTarget = "me" | "x" | "github" | "discord" | "telegram";
+type FeeTarget = "me" | "x" | "github" | "discord" | "telegram" | "fomo";
 type FeeTargetOption = { key: FeeTarget; label: string; Icon: (p: { s?: number }) => ReactElement };
 const ALL_FEE_TARGETS: FeeTargetOption[] = [
   { key: "me", label: "Me", Icon: WalletLogo },
@@ -25,13 +26,17 @@ const ALL_FEE_TARGETS: FeeTargetOption[] = [
   { key: "github", label: "GitHub", Icon: GhLogo },
   { key: "discord", label: "Discord", Icon: DcLogo },
   { key: "telegram", label: "Telegram", Icon: TgLogo },
+  { key: "fomo", label: "Fomo", Icon: FomoLogo },
 ];
-const FEE_TARGETS = ALL_FEE_TARGETS.filter((t) => t.key !== "telegram" || TELEGRAM_ENABLED);
+const FEE_TARGETS = ALL_FEE_TARGETS.filter(
+  (t) => (t.key !== "telegram" || TELEGRAM_ENABLED) && (t.key !== "fomo" || FOMO_ENABLED),
+);
 const FEE_ICONS: Partial<Record<FeeTarget, (p: { s?: number }) => ReactElement>> = {
   x: XLogo,
   github: GhLogo,
   discord: DcLogo,
   telegram: TgLogo,
+  fomo: FomoLogo,
 };
 // Lighter's Robinhood exchange market ids.
 const DEFAULT_LEGS: DraftLeg[] = [
@@ -56,8 +61,15 @@ export default function CreatePage() {
   // Point the 1% at someone's social account instead of your own wallet.
   const [feePlatform, setFeePlatform] = useState<FeeTarget>("me");
   const [feeHandle, setFeeHandle] = useState("");
+  // Fomo has no login to prove a username, so a Fomo target also names the Fomo wallet the fee is paid to.
+  const [feeWallet, setFeeWallet] = useState("");
+  const [fomoLookup, setFomoLookup] = useState<{ busy?: boolean; note?: string; warn?: boolean } | null>(null);
   const creatorHandle =
-    feePlatform === "me" || !feeHandle.trim() ? "" : `${feePlatform}:${feeHandle.trim().replace(/^@/, "").toLowerCase()}`;
+    feePlatform === "me" || !feeHandle.trim()
+      ? ""
+      : feePlatform === "fomo"
+        ? (fomoHandle(feeHandle, feeWallet) ?? "")
+        : `${feePlatform}:${feeHandle.trim().replace(/^@/, "").toLowerCase()}`;
   // Optional profile, written to StakdMetadata right after the launch transaction.
   const [profile, setProfile] = useState({ image: "", description: "", telegram: "", x: "", website: "" });
   const hasProfile = Object.values(profile).some((v) => v.trim() !== "");
@@ -106,8 +118,10 @@ export default function CreatePage() {
     if (!symbol.trim()) p.push("Add a ticker");
     if (totalWeight !== 100) p.push(`Weights add up to ${totalWeight}%, need 100%`);
     if (new Set(legs.map((l) => l.marketId)).size !== legs.length) p.push("Each market can only appear once");
+    // Without this a half-filled Fomo target would quietly launch with the fee going to the launcher instead.
+    if (feePlatform === "fomo" && !creatorHandle) p.push("Add the Fomo username and their Robinhood Chain wallet");
     return p;
-  }, [name, symbol, totalWeight, legs, paused.data, launchOpen.data, isLauncher.data, address]);
+  }, [name, symbol, totalWeight, legs, paused.data, launchOpen.data, isLauncher.data, address, feePlatform, creatorHandle]);
 
   function update(i: number, patch: Partial<DraftLeg>) {
     setLegs((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -140,6 +154,32 @@ export default function CreatePage() {
   const devTokens = devQuote.data as bigint | undefined;
   const devSupplyPct = devTokens ? (Number(formatUnits(devTokens, TOKEN_DECIMALS)) / 1_000_000_000) * 100 : 0;
 
+  /** Fill in a Fomo user's wallet from their username. A button, not on every keystroke: lookups are scarce. */
+  async function findFomoWallet() {
+    const handle = feeHandle.trim().replace(/^@/, "");
+    if (!handle) return;
+    setFomoLookup({ busy: true, note: "Looking up their Fomo wallet…" });
+    try {
+      for (let i = 0; i < 8; i++) {
+        const res = await fetch(`/api/fomo?handle=${encodeURIComponent(handle)}`);
+        const data = await res.json();
+        if (!res.ok) return setFomoLookup({ note: data.error ?? "Lookup failed. Paste their wallet instead.", warn: true });
+        if (data.wallet) {
+          setFeeWallet(data.wallet);
+          return setFomoLookup(
+            data.onRobinhood
+              ? { note: `Found @${handle}'s Fomo wallet.` }
+              : { note: `Found a wallet for @${handle}, but it is not set up as a Fomo wallet on Robinhood Chain yet. Check it with them before launching.`, warn: true },
+          );
+        }
+        await new Promise((r) => setTimeout(r, 5000)); // the directory is still resolving it
+      }
+      setFomoLookup({ note: "Still looking — try again in a minute, or paste their wallet.", warn: true });
+    } catch {
+      setFomoLookup({ note: "Lookup failed. Paste their wallet instead.", warn: true });
+    }
+  }
+
   async function launch() {
     if (!address || !client) return;
     setError(null);
@@ -166,15 +206,42 @@ export default function CreatePage() {
       const receipt = await client.waitForTransactionReceipt({ hash });
 
       let launched: `0x${string}` | null = null;
+      let treasury: `0x${string}` | null = null;
       for (const log of receipt.logs) {
         try {
           const ev = decodeEventLog({ abi: factoryAbi, data: log.data, topics: log.topics });
           if (ev.eventName === "CoinCreated") {
             launched = ev.args.token as `0x${string}`;
+            treasury = ev.args.treasury as `0x${string}`;
             break;
           }
         } catch {
           // not a factory event
+        }
+      }
+
+      // A Fomo fee names its wallet in the handle, so it can be pointed there straight away instead of waiting
+      // for a claim. Skipping this loses nothing: the keeper does the same thing on its next pass.
+      if (treasury && feePlatform === "fomo" && creatorHandle) {
+        try {
+          const res = await fetch("/api/claim", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ treasury, handle: creatorHandle }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            setStep("Confirm sending the creator fee to Fomo…");
+            const h = await writeContractAsync({
+              address: treasury,
+              abi: treasuryAbi,
+              functionName: "bindCreator",
+              args: [data.payout, data.subject, BigInt(data.deadline), data.proof],
+            });
+            await client.waitForTransactionReceipt({ hash: h });
+          }
+        } catch {
+          // The coin is live either way.
         }
       }
 
@@ -419,19 +486,52 @@ export default function CreatePage() {
               ))}
             </div>
             {feePlatform !== "me" && (
-              <div className="field">
+              <div className="field" style={feePlatform === "fomo" ? { marginBottom: 8 } : undefined}>
                 <span className="field-prefix">{FEE_ICONS[feePlatform]?.({ s: 15 })}</span>
                 <input
                   className="input"
                   style={{ paddingLeft: 36 }}
                   placeholder={feePlatform === "discord" ? "username" : "@username"}
                   value={feeHandle}
-                  onChange={(e) => setFeeHandle(e.target.value.replace(/[^A-Za-z0-9_.@-]/g, ""))}
+                  onChange={(e) => {
+                    setFeeHandle(e.target.value.replace(/[^A-Za-z0-9_.@-]/g, ""));
+                    if (feePlatform === "fomo") {
+                      setFeeWallet("");
+                      setFomoLookup(null);
+                    }
+                  }}
                 />
               </div>
             )}
+            {feePlatform === "fomo" && (
+              <>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input
+                    className="input mono"
+                    style={{ flex: 1 }}
+                    placeholder="Their Fomo wallet, 0x…"
+                    value={feeWallet}
+                    onChange={(e) => setFeeWallet(e.target.value.trim())}
+                  />
+                  <button className="btn btn-outline btn-sm" disabled={!feeHandle.trim() || fomoLookup?.busy} onClick={findFomoWallet}>
+                    Find wallet
+                  </button>
+                </div>
+                {fomoLookup?.note && (
+                  <div className="small" style={{ marginBottom: 8, color: fomoLookup.warn ? "var(--red)" : undefined }}>
+                    {fomoLookup.note}
+                  </div>
+                )}
+              </>
+            )}
             <div className="muted small">
-              {creatorHandle ? (
+              {feePlatform === "fomo" ? (
+                <>
+                  Type their fomo.family username and press Find wallet, or paste the Robinhood Chain address from their
+                  Fomo app. Every trade pays that wallet 1% in ETH, landing in their Fomo balance — you keep none of it.
+                  Double-check it: the wallet can never be changed after launch.
+                </>
+              ) : creatorHandle ? (
                 <>
                   Every trade pays <strong>{creatorHandle}</strong> 1% in ETH — you keep none of it. They claim it by
                   signing in with that account; until then it waits in the coin&apos;s treasury.

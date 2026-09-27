@@ -25,6 +25,13 @@ export const TgLogo = ({ s = 20 }: { s?: number }) => (
   </svg>
 );
 
+/** Fomo (fomo.family) — a plain lettermark, not their artwork. */
+export const FomoLogo = ({ s = 20 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M6 2h12a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4Zm3 4.5V18h2.6v-4.3h4.9v-2.3h-4.9V8.8h5.6V6.5H9Z" />
+  </svg>
+);
+
 /** A wallet, for the "the fee just comes to me" option. */
 export const WalletLogo = ({ s = 20 }: { s?: number }) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -37,4 +44,5 @@ export const LOGOS: Record<string, (p: { s?: number }) => React.ReactElement> = 
   github: GhLogo,
   discord: DcLogo,
   telegram: TgLogo,
+  fomo: FomoLogo,
 };

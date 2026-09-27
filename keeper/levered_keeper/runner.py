@@ -23,6 +23,8 @@ import asyncio
 import logging
 import time
 
+import requests
+
 from web3 import Web3
 from web3.logs import DISCARD
 
@@ -296,8 +298,31 @@ class Keeper:
         if to_eth(treasury.functions.creatorOwed().call()) >= self.cfg.min_claim_eth:
             # A fee pointed at a social handle has no creator address until someone signs in and claims it.
             # Calling before that reverts with NotClaimedYet and takes the whole tick down with it, so wait.
-            if int(treasury.functions.creator().call(), 16) != 0:
-                self.chain.send(treasury.functions.claimCreatorFees(), "claimCreatorFees")
+            if int(treasury.functions.creator().call(), 16) == 0 and not self.bind_fomo_creator(treasury):
+                return
+            self.chain.send(treasury.functions.claimCreatorFees(), "claimCreatorFees")
+
+    def bind_fomo_creator(self, treasury) -> bool:
+        """A Fomo fee ("fomo:name@0x…") names its own wallet, and the site will sign a proof that pays only that
+        wallet — so there is nobody to wait for. Point it there; True once the coin has a creator to pay."""
+        handle = treasury.functions.creatorHandle().call()
+        if not handle.lower().startswith("fomo:"):
+            return False
+        try:
+            r = requests.post(self.cfg.claim_api_url, json={"treasury": treasury.address, "handle": handle}, timeout=20)
+            r.raise_for_status()
+            p = r.json()
+        except Exception as e:
+            log.warning("could not get the Fomo claim proof for %s: %r", handle, e)
+            return False
+        _, receipt = self.chain.send(
+            treasury.functions.bindCreator(
+                Web3.to_checksum_address(p["payout"]), bytes.fromhex(p["subject"][2:]), int(p["deadline"]),
+                bytes.fromhex(p["proof"][2:]),
+            ),
+            f"bindCreator {handle}",
+        )
+        return receipt is not None
 
     def margin_available(self, treasury) -> tuple[int, int]:
         """(ETH depositable now under the lifetime cap, ETH in the margin reserve); nothing while launches are paused."""

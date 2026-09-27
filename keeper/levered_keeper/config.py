@@ -30,6 +30,7 @@ class Config:
     min_fee_eth: float  # collect hook fees once a coin has this much pending
     min_burn_eth: float  # buy back and burn once a coin has this much burn fuel waiting
     min_claim_eth: float  # pay out creator / platform shares once this much is owed
+    claim_api_url: str  # the site's claim signer; used to point Fomo creator fees at their named wallet
     max_slippage: float  # Lighter market orders
     swap_slippage: float  # Uniswap v4 swaps
     leverage_headroom: float
@@ -82,6 +83,7 @@ def load() -> Config:
         # Low on purpose: a burn is the visible half of a cross-chain buy, so it should not wait for a round number.
         min_burn_eth=float(_get("MIN_BURN_ETH", "0.00001")),
         min_claim_eth=float(_get("MIN_CLAIM_ETH", "0.001")),
+        claim_api_url=_get("CLAIM_API_URL", "https://www.stakd.tech/api/claim"),
         max_slippage=float(_get("MAX_SLIPPAGE", "0.005")),
         swap_slippage=float(_get("SWAP_SLIPPAGE", "0.02")),
         leverage_headroom=float(_get("LEVERAGE_HEADROOM", "2")),

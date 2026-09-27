@@ -320,3 +320,6 @@ export function isHiddenCoin(token: string) {
 
 /** Telegram creator-fee targets, gated until Telegram is enabled in the Privy dashboard. */
 export const TELEGRAM_ENABLED = process.env.NEXT_PUBLIC_PRIVY_TELEGRAM === "1";
+
+/** Fomo creator-fee targets (a username plus that user's Fomo wallet), gated until switched on. */
+export const FOMO_ENABLED = process.env.NEXT_PUBLIC_FOMO_FEES === "1";

@@ -3,6 +3,7 @@ import { PrivyClient } from "@privy-io/server-auth";
 import { createWalletClient, http, isAddress, keccak256, encodeAbiParameters, type Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { chain } from "@/lib/config";
+import { parseFomoHandle } from "@/lib/fomo";
 
 /**
  * Signs the proof a coin's treasury needs before it will pay a creator fee to someone's wallet.
@@ -45,6 +46,19 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Expected JSON." }, { status: 400 });
   }
+
+  // A Fomo handle names its own wallet ("fomo:name@0x…") and there is no login to check, so the only proof we
+  // will ever sign for it pays that wallet. Anyone may ask for it — it can send the fee nowhere else.
+  const fomo = body.handle ? parseFomoHandle(body.handle) : null;
+  if (fomo) {
+    if (!signerKey) return NextResponse.json({ error: "Claiming is not configured on this deployment." }, { status: 503 });
+    if (!body.treasury || !isAddress(body.treasury)) {
+      return NextResponse.json({ error: "treasury must be an address." }, { status: 400 });
+    }
+    const subject = keccak256(new TextEncoder().encode(`fomo:${fomo.wallet}`));
+    return NextResponse.json(await sign(signerKey, body.treasury, body.handle!, subject, fomo.wallet));
+  }
+
   const { accessToken, treasury, handle, payout } = body;
   if (!accessToken || !treasury || !handle || !payout) {
     return NextResponse.json({ error: "Missing accessToken, treasury, handle or payout." }, { status: 400 });
@@ -88,6 +102,11 @@ export async function POST(req: Request) {
 
   // The platform's own id for the account, not the username: usernames get renamed and recycled, ids do not.
   const subject = keccak256(new TextEncoder().encode(`${platform}:${id}`));
+  return NextResponse.json(await sign(signerKey, treasury, handle, subject, payout));
+}
+
+/** One claim: this chain, this treasury, this handle and account id, this payout wallet, and an expiry. */
+async function sign(signerKey: string, treasury: string, handle: string, subject: `0x${string}`, payout: string) {
   const deadline = BigInt(Math.floor(Date.now() / 1000) + CLAIM_TTL_SECONDS);
 
   const digest = keccak256(
@@ -102,5 +121,5 @@ export async function POST(req: Request) {
     message: { raw: digest },
   });
 
-  return NextResponse.json({ subject, payout, deadline: deadline.toString(), proof });
+  return { subject, payout, deadline: deadline.toString(), proof };
 }
