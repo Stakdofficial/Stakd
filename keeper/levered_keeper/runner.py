@@ -272,7 +272,10 @@ class Keeper:
         if to_eth(treasury.functions.protocolOwed().call()) >= self.cfg.min_claim_eth:
             self.chain.send(treasury.functions.claimProtocolFees(), "claimProtocolFees")
         if to_eth(treasury.functions.creatorOwed().call()) >= self.cfg.min_claim_eth:
-            self.chain.send(treasury.functions.claimCreatorFees(), "claimCreatorFees")
+            # A fee pointed at a social handle has no creator address until someone signs in and claims it.
+            # Calling before that reverts with NotClaimedYet and takes the whole tick down with it, so wait.
+            if int(treasury.functions.creator().call(), 16) != 0:
+                self.chain.send(treasury.functions.claimCreatorFees(), "claimCreatorFees")
 
     def margin_available(self, treasury) -> tuple[int, int]:
         """(ETH depositable now under the lifetime cap, ETH in the margin reserve); nothing while launches are paused."""

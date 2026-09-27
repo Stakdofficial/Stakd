@@ -146,7 +146,10 @@ export default function BurnsPage() {
                       </Link>
                     </td>
                     <td className="mono">{burned.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 2 })}</td>
-                    <td className="mono">{((burned / Number(formatUnits(coin.totalSupply, TOKEN_DECIMALS))) * 100).toFixed(3)}%</td>
+                    {/* Burning shrinks totalSupply, so measure against what the coin started with, not what is left. */}
+                    <td className="mono">
+                      {((burned / (Number(formatUnits(coin.totalSupply, TOKEN_DECIMALS)) + burned)) * 100).toFixed(3)}%
+                    </td>
                     <td className="mono">{eth.toLocaleString("en-US", { maximumFractionDigits: 5 })}</td>
                   </tr>
                 ))}
