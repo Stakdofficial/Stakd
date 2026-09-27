@@ -1,172 +1,172 @@
 [
- {
-  "type": "constructor",
-  "inputs": [
-   {
-    "name": "authority_",
-    "type": "address",
-    "internalType": "contract ILeveredFactory"
-   },
-   {
-    "name": "router_",
-    "type": "address",
-    "internalType": "contract LeveredRouter"
-   },
-   {
-    "name": "stakd_",
-    "type": "address",
-    "internalType": "contract ERC20Burnable"
-   }
-  ],
-  "stateMutability": "nonpayable"
- },
- {
-  "type": "receive",
-  "stateMutability": "payable"
- },
- {
-  "type": "function",
-  "name": "authority",
-  "inputs": [],
-  "outputs": [
-   {
-    "name": "",
-    "type": "address",
-    "internalType": "contract ILeveredFactory"
-   }
-  ],
-  "stateMutability": "view"
- },
- {
-  "type": "function",
-  "name": "burn",
-  "inputs": [
-   {
-    "name": "minTokensOut",
-    "type": "uint256",
-    "internalType": "uint256"
-   }
-  ],
-  "outputs": [
-   {
-    "name": "burned",
-    "type": "uint256",
-    "internalType": "uint256"
-   }
-  ],
-  "stateMutability": "nonpayable"
- },
- {
-  "type": "function",
-  "name": "router",
-  "inputs": [],
-  "outputs": [
-   {
-    "name": "",
-    "type": "address",
-    "internalType": "contract LeveredRouter"
-   }
-  ],
-  "stateMutability": "view"
- },
- {
-  "type": "function",
-  "name": "stakd",
-  "inputs": [],
-  "outputs": [
-   {
-    "name": "",
-    "type": "address",
-    "internalType": "contract ERC20Burnable"
-   }
-  ],
-  "stateMutability": "view"
- },
- {
-  "type": "function",
-  "name": "totalBurned",
-  "inputs": [],
-  "outputs": [
-   {
-    "name": "",
-    "type": "uint256",
-    "internalType": "uint256"
-   }
-  ],
-  "stateMutability": "view"
- },
- {
-  "type": "function",
-  "name": "totalEthReceived",
-  "inputs": [],
-  "outputs": [
-   {
-    "name": "",
-    "type": "uint256",
-    "internalType": "uint256"
-   }
-  ],
-  "stateMutability": "view"
- },
- {
-  "type": "function",
-  "name": "totalEthSpent",
-  "inputs": [],
-  "outputs": [
-   {
-    "name": "",
-    "type": "uint256",
-    "internalType": "uint256"
-   }
-  ],
-  "stateMutability": "view"
- },
- {
-  "type": "event",
-  "name": "Burned",
-  "inputs": [
-   {
-    "name": "ethSpent",
-    "type": "uint256",
-    "indexed": false,
-    "internalType": "uint256"
-   },
-   {
-    "name": "tokensBurned",
-    "type": "uint256",
-    "indexed": false,
-    "internalType": "uint256"
-   }
-  ],
-  "anonymous": false
- },
- {
-  "type": "event",
-  "name": "Funded",
-  "inputs": [
-   {
-    "name": "from",
-    "type": "address",
-    "indexed": true,
-    "internalType": "address"
-   },
-   {
-    "name": "amount",
-    "type": "uint256",
-    "indexed": false,
-    "internalType": "uint256"
-   }
-  ],
-  "anonymous": false
- },
- {
-  "type": "error",
-  "name": "NothingToBurn",
-  "inputs": []
- },
- {
-  "type": "error",
-  "name": "OnlyKeeper",
-  "inputs": []
- }
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "authority_",
+        "type": "address",
+        "internalType": "contract ILeveredFactory"
+      },
+      {
+        "name": "router_",
+        "type": "address",
+        "internalType": "contract LeveredRouter"
+      },
+      {
+        "name": "stakd_",
+        "type": "address",
+        "internalType": "contract ERC20Burnable"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "receive",
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "authority",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract ILeveredFactory"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "burn",
+    "inputs": [
+      {
+        "name": "minTokensOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "burned",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "router",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract LeveredRouter"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "stakd",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract ERC20Burnable"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalBurned",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalEthReceived",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalEthSpent",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "Burned",
+    "inputs": [
+      {
+        "name": "ethSpent",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "tokensBurned",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Funded",
+    "inputs": [
+      {
+        "name": "from",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "NothingToBurn",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OnlyKeeper",
+    "inputs": []
+  }
 ]

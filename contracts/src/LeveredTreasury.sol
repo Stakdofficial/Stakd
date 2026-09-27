@@ -43,6 +43,10 @@ contract LeveredTreasury is ReentrancyGuard {
     /// @notice The platform's own immutable id for whoever claimed the handle. Usernames change and get recycled;
     ///         this does not. Once set, only this id can ever move the payout address again.
     bytes32 public creatorSubject;
+    /// @notice The Lighter account owner this coin's margin is deposited to. Stored on the coin itself, so a
+    ///         later platform-wide change can never redirect money away from the account the coin trades on.
+    ///         Zero on coins bound before this existed; they fall back to the factory's shared setting.
+    address public lighterOwner;
     uint16 public immutable creatorShareBps;
     uint16 public immutable protocolShareBps;
 
@@ -76,7 +80,7 @@ contract LeveredTreasury is ReentrancyGuard {
     event MarginDeposited(uint256 eth, uint256 usdg, address indexed lighterAccount);
     event BuybackAndBurn(uint256 ethSpent, uint256 tokensBurned);
     event FeesClaimed(address indexed to, uint256 amount);
-    event LighterAccountSet(uint64 accountIndex);
+    event LighterAccountSet(uint64 accountIndex, address owner);
 
     error OnlyFactory();
     error OnlyHook();
@@ -88,6 +92,7 @@ contract LeveredTreasury is ReentrancyGuard {
     error MarginCapReached();
     error EthTransferFailed();
     error NotClaimedYet();
+    error LighterOwnerNotAllowed();
     error WrongAccount();
     error BadProof();
     error ProofExpired();
@@ -285,11 +290,15 @@ contract LeveredTreasury is ReentrancyGuard {
     // ---------------------------------------------------------------- keeper actions
 
     /// @notice Record which Lighter sub-account trades this coin's basket. Set once.
-    function setLighterAccount(uint64 accountIndex) external onlyKeeper {
+    /// @notice Bind this coin to its Lighter account, once and for ever. The keeper picks which one, but only
+    ///         from the owner-approved list, so a stolen keeper key cannot point a coin's margin at itself.
+    function setLighterAccount(uint64 accountIndex, address owner_) external onlyKeeper {
         if (lighterAccountSet) revert AlreadySet();
+        if (!factory.isLighterOwner(owner_)) revert LighterOwnerNotAllowed();
         lighterAccountIndex = accountIndex;
+        lighterOwner = owner_;
         lighterAccountSet = true;
-        emit LighterAccountSet(accountIndex);
+        emit LighterAccountSet(accountIndex, owner_);
     }
 
     /// @notice Swap `ethAmount` of margin to USDG on Uniswap v4 and deposit it into the operator's Lighter account.
@@ -305,9 +314,12 @@ contract LeveredTreasury is ReentrancyGuard {
         usdg = _router().swap{value: ethAmount}(_marginPool(cfg), true, ethAmount, minUsdgOut, address(this));
         totalUsdgDeposited += usdg;
 
+        // The coin's own Lighter owner, not the factory's current one: a coin must keep depositing to the
+        // account it actually trades on, however the platform's default moves on afterwards.
+        address to = lighterOwner == address(0) ? cfg.lighterAccount : lighterOwner;
         IERC20(cfg.usdg).forceApprove(cfg.lighter, usdg);
-        ILighter(cfg.lighter).deposit(cfg.lighterAccount, cfg.assetIndex, cfg.routeType, usdg);
-        emit MarginDeposited(ethAmount, usdg, cfg.lighterAccount);
+        ILighter(cfg.lighter).deposit(to, cfg.assetIndex, cfg.routeType, usdg);
+        emit MarginDeposited(ethAmount, usdg, to);
     }
 
     /// @notice Turn returned profit into burned coins: swap any USDG held to ETH on Uniswap v4, then spend all spare

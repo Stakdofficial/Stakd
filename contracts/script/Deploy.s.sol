@@ -58,6 +58,9 @@ contract Deploy is Script {
         factory.setClaimVerifier(address(new StakdClaimVerifier()));
         address claimSigner = vm.envOr("CLAIM_SIGNER", address(0));
         if (claimSigner != address(0)) factory.setClaimSigner(claimSigner);
+        // The keeper may only bind coins to Lighter accounts on this list, so the one this factory
+        // deposits to has to be on it from the start.
+        factory.setLighterOwner(margin.lighterAccount, true);
         factory.setPeripherals(address(hook), address(router));
 
         // The half of every volatility fee that burns official $STAKD. It trades $STAKD on the router of whichever

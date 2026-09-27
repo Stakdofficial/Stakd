@@ -430,7 +430,7 @@ abstract contract LeveredTestBase is Test {
         vm.expectRevert(LeveredTreasury.OnlyKeeper.selector);
         t.buybackAndBurn(0, 0);
         vm.expectRevert(LeveredTreasury.OnlyKeeper.selector);
-        t.setLighterAccount(7);
+        t.setLighterAccount(7, address(0xBEEF));
         vm.stopPrank();
     }
 

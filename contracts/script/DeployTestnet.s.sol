@@ -66,6 +66,8 @@ contract DeployTestnet is Script {
         StakdCrossChainRouter xRouter =
             new StakdCrossChainRouter(POOL_MANAGER, ILeveredFactory(address(factory)), deployer);
 
+        // The keeper may only bind coins to Lighter accounts on this list, so seed it with this factory's own.
+        factory.setLighterOwner(margin.lighterAccount, true);
         factory.setTreasuryDeployer(address(new StakdTreasuryDeployer()));
         factory.setClaimVerifier(address(new StakdClaimVerifier()));
         factory.setPeripherals(address(hook), address(router));

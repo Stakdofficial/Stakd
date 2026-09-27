@@ -29,6 +29,7 @@ interface ILeveredFactory {
     function crosschainRouter() external view returns (address);
     function stakdBurner() external view returns (address);
     function claimSigner() external view returns (address);
+    function isLighterOwner(address owner) external view returns (bool);
     function claimVerifier() external view returns (address);
     function isKeeper(address account) external view returns (bool);
     function protocolFeeRecipient() external view returns (address);

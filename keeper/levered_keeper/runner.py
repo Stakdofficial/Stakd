@@ -139,7 +139,15 @@ class Keeper:
                 return
             self.save()
         if not treasury.functions.lighterAccountSet().call():
-            self.chain.send(treasury.functions.setLighterAccount(cs.sub_account_index), f"setLighterAccount {cs.sub_account_index}")
+            # Bind the account and the master that owns it together. The coin keeps depositing to this master for
+            # good, so the platform can add more masters later without stranding it. Factories before v6 take the
+            # index alone and read the owner from their own config.
+            owner = self.lighter.l1_address
+            try:
+                call = treasury.functions.setLighterAccount(cs.sub_account_index, owner)
+            except Exception:
+                call = treasury.functions.setLighterAccount(cs.sub_account_index)
+            self.chain.send(call, f"setLighterAccount {cs.sub_account_index} on {owner}")
 
     def sub_accounts_in_use(self) -> set[int]:
         """Sub-accounts claimed by any coin, in keeper state or bound on-chain — this factory's coins and those of

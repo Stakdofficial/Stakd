@@ -105,6 +105,11 @@ contract LeveredFactory is Ownable, IUnlockCallback {
     bool public launchOpen; // false = only allowlisted creators may launch
     mapping(address => bool) public isKeeper;
     mapping(address => bool) public isLauncher;
+    /// @notice Lighter account owners a coin is allowed to be bound to. Lighter caps sub-accounts per master, so
+    ///         the platform runs several; this is the list of them. A coin's Lighter account is chosen by the
+    ///         keeper, which is a hot key, so the keeper may only ever pick from here — it can never invent an
+    ///         address and send a coin's margin somewhere the owner has not approved.
+    mapping(address => bool) public isLighterOwner;
 
     MarginConfig private _marginConfig;
     MarginConfig private _pendingMarginConfig;
@@ -133,6 +138,7 @@ contract LeveredFactory is Ownable, IUnlockCallback {
     event MarginConfigProposed(MarginConfig config, uint256 eta);
     event MarginConfigCancelled();
     event FeeSharesSet(address protocolRecipient, uint16 creatorShareBps, uint16 protocolShareBps);
+    event LighterOwnerSet(address owner, bool allowed);
     event StartTickSet(int24 tick);
     event MarginCapSet(uint256 amount);
     event PausedSet(bool paused);
@@ -341,6 +347,14 @@ contract LeveredFactory is Ownable, IUnlockCallback {
         if (router_ == router) revert BadPeripheral();
         crosschainRouter = router_;
         emit CrosschainRouterSet(router_);
+    }
+
+    /// @notice Approve (or withdraw) a Lighter account owner the keeper may bind coins to. Adding one is how the
+    ///         platform makes room once a master account's sub-account slots are full. Withdrawing one stops new
+    ///         coins binding to it; coins already bound keep their own address and are unaffected.
+    function setLighterOwner(address owner_, bool allowed) external onlyOwner {
+        isLighterOwner[owner_] = allowed;
+        emit LighterOwnerSet(owner_, allowed);
     }
 
     function setKeeper(address keeper, bool allowed) external onlyOwner {
