@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { formatUnits } from "viem";
 import { avgLeverage, Basket } from "@/components/Basket";
-import { ETH_DECIMALS, FACTORY, FACTORY_VERSION } from "@/lib/config";
+import { DcLogo, FomoLogo, GhLogo, TgLogo, XLogo } from "@/components/BrandLogos";
+import { ETH_DECIMALS, FACTORY, FACTORY_VERSION, FOMO_ENABLED, TELEGRAM_ENABLED } from "@/lib/config";
 import { useCoins, useMarkets, type CoinSummary } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 import { BasketShowcase } from "@/components/landing/BasketShowcase";
@@ -33,8 +34,8 @@ export default function Home() {
         <div className="container hero-split">
           <div className="hero-copy">
             <Reveal>
-              <a href="#hook-v3" className="pill">
-                <span className="pill-dot" /> New · Hook v3 is live · creators earn 1% of every trade
+              <a href="#creator-fees" className="pill">
+                <span className="pill-dot" /> New · Send your 1% to any {FOMO_ENABLED ? "social or Fomo" : "social"} account
               </a>
             </Reveal>
             <Reveal delay={80}>
@@ -57,7 +58,7 @@ export default function Home() {
               </a>
             </Reveal>
             <Reveal delay={320} className="hero-trust">
-              {["Creators earn 1%", "Paired with ETH", "No ETH to launch", "Liquidity locked forever", "75% of profit burned", "Buyable with SOL"].map((t) => (
+              {["Creators earn 1%", "Paired with ETH", "No ETH to launch", "Liquidity locked forever", "75% of profit burned", "Stop-loss built in", "Buyable with SOL"].map((t) => (
                 <span key={t} className="trust-item">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                     <path d="m20 6-11 11-5-5" />
@@ -77,13 +78,44 @@ export default function Home() {
 
       <PlatformStats />
 
+      <section className="section" id="creator-fees">
+        <Reveal className="section-head">
+          <span className="eyebrow">New · live on mainnet</span>
+          <h2 className="section-title">Send your 1% to anyone</h2>
+          <p className="lead center">
+            The creator fee doesn&apos;t have to come to you. Point it at a friend, a dev, a community or a trader, by
+            their username. Every buy and sell pays them 1% in ETH from the very first trade.
+          </p>
+        </Reveal>
+        <Reveal delay={80} className="fee-targets">
+          {FEE_PLATFORMS.map(({ label, Icon }) => (
+            <span key={label} className="fee-target">
+              <Icon s={16} /> {label}
+            </span>
+          ))}
+        </Reveal>
+        <div className="v3-grid">
+          {FEE_REDIRECT.map((f, i) => (
+            <Reveal key={f.tag} delay={120 + i * 80} className={`v3-card${f.creator ? " creator" : ""}`}>
+              <span className="v3-tag">{f.tag}</span>
+              <h3>{f.title}</h3>
+              <p>{f.body}</p>
+              <div className="v3-spec">{f.spec}</div>
+            </Reveal>
+          ))}
+        </div>
+        <Reveal delay={360} className="routes-note">
+          The launcher keeps none of it, and neither do we. Where the fee goes is set at launch and can&apos;t be changed.
+        </Reveal>
+      </section>
+
       <section className="section" id="hook-v3">
         <Reveal className="section-head">
-          <span className="eyebrow">New · Hook v3 · live on mainnet</span>
-          <h2 className="section-title">The fee that fights back — and pays creators</h2>
+          <span className="eyebrow">Smart fees · live on mainnet</span>
+          <h2 className="section-title">The fee that fights back, and pays creators</h2>
           <p className="lead center">
-            Every coin launched from today reads the market on every swap. Creators get paid, bots pay the most, and
-            when the chart bleeds, fees turn into burns.
+            Every coin reads the market on every swap. Creators get paid, bots pay the most, wild candles burn
+            $STAKD, and when the chart bleeds, fees turn into burns.
           </p>
         </Reveal>
         <div className="v3-grid">
@@ -226,6 +258,40 @@ export default function Home() {
   );
 }
 
+const FEE_PLATFORMS = [
+  { label: "X", Icon: XLogo },
+  { label: "GitHub", Icon: GhLogo },
+  { label: "Discord", Icon: DcLogo },
+  ...(TELEGRAM_ENABLED ? [{ label: "Telegram", Icon: TgLogo }] : []),
+  ...(FOMO_ENABLED ? [{ label: "Fomo", Icon: FomoLogo }] : []),
+];
+
+const FEE_REDIRECT: { tag: string; title: string; body: string; spec: string; creator?: boolean }[] = [
+  {
+    tag: "Socials",
+    title: TELEGRAM_ENABLED ? "Pay any X, GitHub, Discord or Telegram handle" : "Pay any X, GitHub or Discord handle",
+    body: `Type a username when you launch. The fee piles up for them in the coin's treasury until they sign in with that account and pick a wallet. They don't need a wallet first.`,
+    spec: "sign in to claim · locked to their account",
+    creator: true,
+  },
+  ...(FOMO_ENABLED
+    ? [
+        {
+          tag: "Fomo",
+          title: "Straight into a Fomo balance",
+          body: "Type a fomo.family username and we find their wallet. Every trade pays it directly, landing in their Fomo app. Nothing to claim, nothing to sign.",
+          spec: "no claiming · paid automatically",
+        },
+      ]
+    : []),
+  {
+    tag: "Safe by design",
+    title: "Nobody can redirect it",
+    body: "A username can be renamed, but the fee stays with the account that first claims it. Once a coin launches, its fee target is locked for good.",
+    spec: "set at launch · can't be changed",
+  },
+];
+
 const V3: { tag: string; title: string; body: string; spec: string; creator?: boolean }[] = [
   {
     tag: "Creator fee",
@@ -248,9 +314,9 @@ const V3: { tag: string; title: string; body: string; spec: string; creator?: bo
   },
   {
     tag: "Volatility fee",
-    title: "Wild candles pay more",
-    body: "The coin's fee rises with recent price movement and fades back to the creator's rate as the market calms, so the busiest minutes fund the coin the most.",
-    spec: "+0.05% per 1% move · up to +2%",
+    title: "Wild candles burn $STAKD",
+    body: "The coin's fee rises with recent price movement and fades back as the market calms. The coin's share of that extra fee is split in two: half buys back and burns the coin, half buys back and burns $STAKD.",
+    spec: "+0.05% per 1% move · up to +2% · ½ burns $STAKD",
   },
 ];
 
@@ -261,7 +327,11 @@ const FAQ: [string, string][] = [
   ],
   [
     "Do creators earn anything?",
-    "Yes, on coins launched with Hook v3. Every buy and sell pays the creator 1% in ETH on top of the coin's fee, and it's paid out to the creator's wallet automatically. Only the creator can receive it.",
+    "Yes, on coins launched with Hook v3 or later. Every buy and sell pays 1% in ETH on top of the coin's fee. By default it goes to the launcher's wallet, but it can be pointed at any X, GitHub, Discord, Telegram or Fomo account instead.",
+  ],
+  [
+    "How does someone collect a creator fee sent to their account?",
+    "For X, GitHub, Discord and Telegram, they sign in on the Claim page with that account and pick a wallet. Until then the ETH waits in the coin's treasury, and nobody else can take it. For Fomo there's nothing to claim: the fee is paid straight into their Fomo wallet on Robinhood Chain.",
   ],
   [
     "Why did my sell cost more than the usual fee?",
@@ -277,7 +347,11 @@ const FAQ: [string, string][] = [
   ],
   [
     "What happens if the portfolio loses?",
-    "Leveraged perps can lose margin or be liquidated. Burns only happen from realized profit above the high-water mark, so there are no buybacks while the portfolio is below its previous high.",
+    "Every portfolio has a stop-loss. If it falls 35% below its high, the keeper closes every position and pauses the coin. At 2x that's roughly a 17% market drop, well before liquidation. What's left stays in the coin's account. Burns only come from profit above the previous high.",
+  ],
+  [
+    "When does profit get burned?",
+    "When the portfolio is 10% above its previous high, the keeper locks in half of that gain and withdraws 75% of it to buy back and burn the coin. The rest stays in the portfolio.",
   ],
   [
     "Do I need ETH to launch a coin?",

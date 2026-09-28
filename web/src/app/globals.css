@@ -2171,6 +2171,27 @@ body,
   background: var(--blue-50);
 }
 
+.fee-targets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 0 26px;
+}
+
+.fee-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-weight: 600;
+  font-size: 15px;
+}
+
 .v3-card.creator {
   border-color: var(--gold-edge);
   background: linear-gradient(160deg, var(--gold-soft), var(--surface) 70%);
