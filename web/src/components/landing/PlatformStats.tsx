@@ -12,6 +12,8 @@ type Stats = {
   creatorEth: number;
   marginEth: number;
   buybackEth: number;
+  coinBuybackEth?: number;
+  stakdBurnEth?: number;
   updatedAt: number;
 };
 
@@ -38,7 +40,16 @@ export function PlatformStats() {
         { k: "Trading volume", v: ethStr(s.volumeEth), sub: usd ? usdStr(s.volumeEth * usd) : undefined },
         { k: "Fees earned", v: ethStr(s.feesEth), sub: usd ? usdStr(s.feesEth * usd) : undefined },
         { k: "Sent to Lighter", v: ethStr(s.marginEth), sub: usd ? `${usdStr(s.marginEth * usd)} of trading margin` : "trading margin" },
-        { k: "Bought back & burned", v: ethStr(s.buybackEth), sub: usd ? usdStr(s.buybackEth * usd) : undefined },
+        {
+          k: "Bought back & burned",
+          v: ethStr(s.buybackEth),
+          sub: [
+            usd ? usdStr(s.buybackEth * usd) : "",
+            s.stakdBurnEth ? `${ethStr(s.coinBuybackEth ?? 0)} coin buybacks + ${ethStr(s.stakdBurnEth)} $STAKD burns` : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        },
         { k: "Paid to creators", v: ethStr(s.creatorEth), sub: usd ? usdStr(s.creatorEth * usd) : undefined },
       ]
     : [];

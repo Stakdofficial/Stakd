@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { createPublicClient, formatUnits, http, parseAbiItem, type Address, type Hex } from "viem";
+import { createPublicClient, formatUnits, http, parseAbi, parseAbiItem, type Address, type Hex } from "viem";
 import { factoryAbi, treasuryAbi } from "@/lib/abis";
-import { ALL_FACTORIES, chain, isHiddenCoin, POOL_MANAGER } from "@/lib/config";
+import { ALL_FACTORIES, chain, isHiddenCoin, POOL_MANAGER, STAKD_BURNER } from "@/lib/config";
 
 /**
  * Platform-wide totals for the landing page, read straight from the chain across every Stakd factory. Volume is not
@@ -16,6 +16,11 @@ const swapEvent = parseAbiItem(
 // Robinhood Chain makes ~10 blocks a second; the RPC serves ~1M blocks per getLogs call.
 const CHUNK = 1_000_000n;
 const BLOCKS_PER_SECOND = 10n;
+
+// Each factory since Hook v4 sends half of every coin's volatility fee to its own StakdBurner, which buys $STAKD and
+// burns it. That is a buyback too, but it never passes through a treasury, so it is counted separately.
+const burnerAbi = parseAbi(["function stakdBurner() view returns (address)", "function totalEthSpent() view returns (uint256)"]);
+const ZERO = "0x0000000000000000000000000000000000000000";
 
 type Coin = { token: Address; treasury: Address; poolId: Hex; createdAt: bigint };
 
@@ -40,11 +45,24 @@ export async function GET() {
       );
       return res.reduce((s, r) => s + (r as bigint), 0n);
     };
-    const [fees, margin, buyback, creator] = await Promise.all([
+    const stakdBurned = async () => {
+      const found = await Promise.all(
+        ALL_FACTORIES.map((address) => client.readContract({ address, abi: burnerAbi, functionName: "stakdBurner" }).catch(() => null)),
+      );
+      const burners = new Set([STAKD_BURNER, ...found].filter((b): b is Address => !!b && b !== ZERO).map((b) => b.toLowerCase()));
+      const spent = await Promise.all(
+        [...burners].map((address) =>
+          client.readContract({ address: address as Address, abi: burnerAbi, functionName: "totalEthSpent" }).catch(() => 0n),
+        ),
+      );
+      return spent.reduce((s, r) => s + r, 0n);
+    };
+    const [fees, margin, buyback, creator, stakdBurn] = await Promise.all([
       sum("totalFeesReceived"),
       sum("totalMarginDeposited"),
       sum("totalBuybackEth"),
       sum("totalCreatorFees"),
+      stakdBurned(),
     ]);
 
     // Volume: every swap's ETH leg, from the oldest coin's launch to now.
@@ -79,7 +97,9 @@ export async function GET() {
       feesEth: eth(fees + creator),
       creatorEth: eth(creator),
       marginEth: eth(margin),
-      buybackEth: eth(buyback),
+      buybackEth: eth(buyback + stakdBurn),
+      coinBuybackEth: eth(buyback),
+      stakdBurnEth: eth(stakdBurn),
       updatedAt: Date.now(),
     });
   } catch (e) {
