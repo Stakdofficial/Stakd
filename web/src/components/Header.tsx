@@ -5,7 +5,6 @@ import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import { chain } from "@/lib/config";
 import { Logo } from "@/components/Logo";
 import { XLink } from "@/components/XLink";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function Header() {
   const { address, chainId, isConnected } = useAccount();
@@ -23,14 +22,13 @@ export function Header() {
           </span>
         </Link>
         <nav className="nav">
-          <Link href="/#coins">Coins</Link>
+          <Link href="/coins">Coins</Link>
           <Link href="/burns">Burns</Link>
           <Link href="/claim">Claim</Link>
           <Link href="/docs">Docs</Link>
           <XLink size={17} />
-          <ThemeToggle />
           <Link href="/create" className="btn btn-primary btn-sm">
-            Create coin
+            Launch a coin →
           </Link>
           {!isConnected ? (
             <button className="btn btn-outline btn-sm" disabled={isPending} onClick={() => connect({ connector: connectors[0] })}>

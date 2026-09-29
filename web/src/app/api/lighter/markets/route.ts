@@ -13,13 +13,28 @@ export async function GET() {
 
   const markets: LighterMarket[] = (body.order_book_details ?? [])
     .filter((d: { status: string }) => d.status === "active")
-    .map((d: { market_id: number; symbol: string; last_trade_price: number; min_initial_margin_fraction: number }) => ({
-      marketId: d.market_id,
-      symbol: d.symbol,
-      price: Number(d.last_trade_price),
-      maxLeverage: d.min_initial_margin_fraction ? Math.floor(10_000 / d.min_initial_margin_fraction) : 1,
-      kind: classify(d.symbol),
-    }))
+    .map(
+      (d: {
+        market_id: number;
+        symbol: string;
+        last_trade_price: number;
+        min_initial_margin_fraction: number;
+        daily_price_change?: number;
+        daily_price_low?: number;
+        daily_price_high?: number;
+        daily_quote_token_volume?: number;
+      }) => ({
+        marketId: d.market_id,
+        symbol: d.symbol,
+        price: Number(d.last_trade_price),
+        maxLeverage: d.min_initial_margin_fraction ? Math.floor(10_000 / d.min_initial_margin_fraction) : 1,
+        kind: classify(d.symbol),
+        change24h: Number(d.daily_price_change ?? 0),
+        low24h: Number(d.daily_price_low ?? 0),
+        high24h: Number(d.daily_price_high ?? 0),
+        volume24h: Number(d.daily_quote_token_volume ?? 0),
+      }),
+    )
     .sort((a: LighterMarket, b: LighterMarket) => a.symbol.localeCompare(b.symbol));
 
   return NextResponse.json({ markets });

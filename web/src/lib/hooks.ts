@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
-import { ALL_FACTORIES, FACTORY, isHiddenCoin, metadataAbi, metadataFor } from "./config";
+import { ALL_FACTORIES, FACTORY, isHiddenCoin, metadataAbi, metadataCandidates, usableImage } from "./config";
 import { factoryAbi, tokenAbi, treasuryAbi } from "./abis";
 import type { LighterAccount, LighterMarket } from "./lighter";
 
@@ -121,11 +121,21 @@ export function useCoins(limit = 48) {
   });
 
   // Profiles are optional, so failures here must never break the list.
+  // A coin's profile can sit in more than one metadata contract, so every candidate is read and the first image wins.
+  const metaReads = base.flatMap((c, i) => metadataCandidates(c.factory).map((address) => ({ i, address })));
   const metas = useReadContracts({
     allowFailure: true,
-    contracts: base.map((c) => ({ address: metadataFor(c.factory), abi: metadataAbi, functionName: "metadata" as const, args: [c.token] })),
+    contracts: metaReads.map(({ address }, k) => ({ address, abi: metadataAbi, functionName: "metadata" as const, args: [base[metaReads[k].i].token] })),
     query: { enabled: base.length > 0, refetchInterval: 60_000 },
   });
+  const imageOf = (i: number) => {
+    for (let k = 0; k < metaReads.length; k++) {
+      if (metaReads[k].i !== i) continue;
+      const img = usableImage((metas.data?.[k]?.result as { image?: string } | undefined)?.image);
+      if (img) return img;
+    }
+    return undefined;
+  };
 
   const per = 3 + TREASURY_FIELDS.length;
   const coins: CoinSummary[] | undefined = details.data
@@ -147,7 +157,7 @@ export function useCoins(limit = 48) {
           totalTokensBurned: r[7] as bigint,
           lighterAccountSet: r[8] as boolean,
           lighterAccountIndex: r[9] as bigint,
-          image: (metas.data?.[i]?.result as { image?: string } | undefined)?.image || undefined,
+          image: imageOf(i),
           factory: c.factory,
         };
       })

@@ -260,8 +260,42 @@ const METADATA_BY_FACTORY: Record<string, Address> = Object.fromEntries(
     .map(([f, m]) => [f.toLowerCase(), m as Address]),
 );
 
+/**
+ * Each factory's own metadata contract, read from the contracts themselves (`factory()` on each StakdMetadata), so the
+ * site finds every coin's profile even when NEXT_PUBLIC_FACTORY_METADATA is missing an entry. The first factory has
+ * two: METADATA (where its profiles are written) and an older one some profiles still live in, so reads try both.
+ */
+const KNOWN_METADATA: Record<string, Address[]> = {
+  "0x80a1f3fc990a82cc37096697c174300ace606ba8": ["0xb393D9AFEec7e5d0157Ac1868C57e0a9224A39d3"], // v6
+  "0xa6291c7011f48fbc6aad1b46f451f4ce79163d71": ["0x154212b63cb12d9a70ed12369ed1e81c319083fd"], // v5
+  "0x007e97e52a6109eb27ddaaf6cb075fb9d604a3a0": ["0x363bd69779489b1746a2cfa22d5368e5204ebcab"], // v4
+  "0xf1311a0f1f47e970db7b0d277d831b196582cdfd": ["0xc28A2243c7Bc3c8Dca67CAc86B97ae612806F3e7"], // v3
+};
+const EXTRA_METADATA: Record<string, Address[]> = {
+  "0x019e1242e8d4b76bc0a1dca1b912daa04323d355": ["0xa55D5E6E5e80C22Ad09e7743E95D2152C09d800B", "0xc988d3111df8ed2c9fe82ae0411055506b7c0d26"], // v1
+};
+
+/** Where a coin's profile is written: the configured contract for its factory, else the known one, else METADATA. */
 export function metadataFor(factory: Address | undefined): Address {
-  return (factory && METADATA_BY_FACTORY[factory.toLowerCase()]) || METADATA;
+  const f = factory?.toLowerCase();
+  return (f && (METADATA_BY_FACTORY[f] || KNOWN_METADATA[f]?.[0])) || METADATA;
+}
+
+/** Every contract a coin's profile might be in, the write target first. Reads try them in order. */
+export function metadataCandidates(factory: Address | undefined): Address[] {
+  const f = factory?.toLowerCase() ?? "";
+  const all = [metadataFor(factory), ...(KNOWN_METADATA[f] ?? []), ...(EXTRA_METADATA[f] ?? [])];
+  return all.filter((a, i) => all.findIndex((b) => b.toLowerCase() === a.toLowerCase()) === i);
+}
+
+/** A profile image we can actually show: an image data URI or an http(s)/ipfs URL that isn't a social post link. */
+export function usableImage(src: string | undefined): string | undefined {
+  const s = src?.trim();
+  if (!s) return undefined;
+  if (s.startsWith("data:image/")) return s;
+  if (!/^(https?:|ipfs:)/i.test(s)) return undefined;
+  if (/^https?:\/\/(www\.)?(x|twitter)\.com\//i.test(s)) return undefined;
+  return s.replace(/^ipfs:\/\//i, "https://ipfs.io/ipfs/");
 }
 
 const META_TUPLE = {

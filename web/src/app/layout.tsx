@@ -5,6 +5,8 @@ import { Providers } from "@/components/Providers";
 import { XLink } from "@/components/XLink";
 import { themeInitScript } from "@/lib/theme";
 import "./globals.css";
+import "./stakd.css";
+import "./home.css";
 
 const SITE = "https://www.stakd.tech";
 const DESCRIPTION =
@@ -21,9 +23,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+        />
       </head>
       <body>
         <Providers>

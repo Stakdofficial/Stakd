@@ -4,6 +4,11 @@ export type LighterMarket = {
   price: number;
   maxLeverage: number;
   kind: "crypto" | "stock" | "other";
+  /** Last 24h, from Lighter's order book stats; absent on older responses. */
+  change24h?: number;
+  low24h?: number;
+  high24h?: number;
+  volume24h?: number;
 };
 
 export type LighterPosition = {

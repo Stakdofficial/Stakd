@@ -14,10 +14,11 @@ import { CoinActivity } from "@/components/CoinActivity";
 import { useQuery } from "@tanstack/react-query";
 import { profileLink, xHandle } from "@/lib/links";
 import { factoryAbi, hookAbi, routerAbi, tokenAbi, treasuryAbi } from "@/lib/abis";
-import { burnerFor, chain, erc20Abi, TOTAL_SUPPLY, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataFor, orderFactoryFor, POOL_MANAGER, poolManagerAbi, quoterAbi, stakdBurnerAbi, TOKEN_DECIMALS, V4_QUOTER } from "@/lib/config";
+import { burnerFor, chain, erc20Abi, TOTAL_SUPPLY, ETH_DECIMALS, explorerAddress, isHiddenCoin, metadataAbi, metadataCandidates, metadataFor, orderFactoryFor, POOL_MANAGER, poolManagerAbi, quoterAbi, stakdBurnerAbi, TOKEN_DECIMALS, usableImage, V4_QUOTER } from "@/lib/config";
 import { useCoinFactory, useEthPrice, useLighterAccount, useMarkets, type Leg } from "@/lib/hooks";
 import { formatUsd } from "@/lib/lighter";
 import { decodePoolState, ethPerToken, POOL_STATE_SLOTS, poolStateSlot, sqrtPriceFromSlots } from "@/lib/pool";
+import { legRing, pct, usd as usdFmt, usePlatformStats } from "@/lib/stats";
 
 const ethNum = (v: bigint | undefined) => Number(formatUnits(v ?? 0n, ETH_DECIMALS));
 const ethStr = (v: bigint | undefined) => `${ethNum(v).toLocaleString("en-US", { maximumFractionDigits: 4 })} ETH`;
@@ -53,7 +54,12 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
   const hookAddress = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "hook", query: { enabled: !!coinFactory } });
   const poolKey = useReadContract({ address: FACTORY, abi: factoryAbi, functionName: "poolKeyOf", args: [token], query: { enabled: !!coinFactory } });
   const METADATA = metadataFor(coinFactory);
-  const meta = useReadContract({ address: METADATA, abi: metadataAbi, functionName: "metadata", args: [token], query: { enabled: !!coinFactory } });
+  const metaAll = useReadContracts({
+    allowFailure: true,
+    contracts: metadataCandidates(coinFactory).map((address) => ({ address, abi: metadataAbi, functionName: "metadata" as const, args: [token] })),
+    query: { enabled: !!coinFactory },
+  });
+  const platform = usePlatformStats();
   const poolId = coin.data?.poolId;
 
   const info = useReadContracts({
@@ -126,7 +132,11 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
         ? { live: false, text: `First ${ethStr(bridged)} margin deposit confirmed · positions are being opened` }
         : { live: true, text: `Trading ${positions.length} of ${legs.length} positions on Lighter` };
 
-  const profile = meta.data as { image: string; description: string; telegram: string; x: string; website: string } | undefined;
+  type P = { image: string; description: string; telegram: string; x: string; website: string };
+  const profiles = (metaAll.data ?? []).map((r) => r.result as P | undefined);
+  // The write target comes first, so a creator's latest save wins; older contracts only fill in what it lacks.
+  const profile = profiles.find((m) => m && (m.image || m.description || m.x || m.telegram || m.website)) ?? profiles[0];
+  const image = usableImage(profile?.image);
   const socials = [
     { label: "Telegram", href: profileLink(profile?.telegram, "telegram") },
     { label: xHandle(profile?.x) ? `@${xHandle(profile?.x)}` : "X", href: profileLink(profile?.x, "x") },
@@ -134,128 +144,203 @@ export default function CoinPage({ params }: { params: Promise<{ token: string }
   ].filter((l): l is { label: string; href: string } => !!l.href);
   const isCreator = !!address && !!coin.data?.creator && address.toLowerCase() === coin.data.creator.toLowerCase();
 
+  const volume = platform.data?.perCoin?.[token.toLowerCase()];
+  const mcapUsd = price * Number(formatUnits(supply, TOKEN_DECIMALS));
+  const burnedP = Number((burnedTotal * 1_000_000n) / TOTAL_SUPPLY) / 10_000;
+  const fundUsd = lighter.data?.equity;
+
   return (
-    <div className="two-col">
-      <div className="stack">
-        <div className="row">
-          <div className="avatar" style={{ width: 56, height: 56, fontSize: 20, overflow: "hidden", padding: 0 }}>
-            {profile?.image ? (
+    <div className="cpg">
+      <div className="cpg-top">
+        <div className="cpg-id">
+          <div className="cpg-ring" style={{ background: legRing(legs) }}>
+            {image ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={profile.image} alt="" width={56} height={56} style={{ width: 56, height: 56, objectFit: "cover" }} />
+              <img src={image} alt="" />
             ) : (
-              symbol.slice(0, 2)
+              <span>{symbol.slice(0, 2)}</span>
             )}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h1>{name}</h1>
-            <div className="muted">
-              ${symbol} · <CopyAddress address={token} label={`Copy ${symbol} contract address`} />
-              {" · "}
-              <a href={explorerAddress(token)} target="_blank" rel="noreferrer" style={{ color: "var(--blue-600)", fontWeight: 600 }}>
+          <div style={{ minWidth: 0 }}>
+            <h1 className="cpg-tk">${symbol}</h1>
+            <div className="cpg-meta">
+              <span className="cpg-name">{name}</span>
+              <CopyAddress address={token} label={`Copy ${symbol} contract address`} />
+              <a href={explorerAddress(token)} target="_blank" rel="noreferrer">
                 Explorer
               </a>
               {socials.map((l) => (
-                <span key={l.label}>
-                  {" · "}
-                  <a href={l.href} target="_blank" rel="noreferrer" style={{ color: "var(--blue-600)", fontWeight: 600 }}>
-                    {l.label}
-                  </a>
-                </span>
+                <a key={l.label} href={l.href} target="_blank" rel="noreferrer">
+                  {l.label}
+                </a>
               ))}
+              <span className={`cpg-status ${status.live ? "live" : ""}`}>{status.live ? "● Trading" : "Collecting fees"}</span>
             </div>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 24, fontWeight: 700 }} className="mono">
-              {formatUsd(price, price < 0.01 ? 8 : 4)}
-            </div>
-            <div className="muted small">market cap {formatUsd(price * Number(formatUnits(supply, TOKEN_DECIMALS)), 0)}</div>
-            <ShareButtons token={token} name={name} symbol={symbol} handle={xHandle(profile?.x)} />
-          </div>
         </div>
-
-        <div className="card card-soft row small">
-          <span className={`status-dot ${status.live ? "live" : ""}`} />
-          {status.text}
-        </div>
-
-        {isHiddenCoin(token) && (
-          <div className="alert small">This coin is not listed on Stakd. You reached it by direct link.</div>
-        )}
-
-        {profile?.description && <div className="card stack small coin-description">{profile.description}</div>}
-
-        {isCreator && <ProfileEditor token={token} metadata={METADATA} current={profile} onSaved={() => meta.refetch()} />}
-
-        {poolId && <LiveChart poolId={poolId} />}
-
-        {usdPerEth > 0 && <PriceCurve poolTokens={poolTokens} poolUsdc={poolEth * usdPerEth} launchSupply={1_000_000_000} />}
-
-        <div className="card stack">
-          <div className="spread">
-            <h3>Portfolio</h3>
-            <span className="chip chip-soft">{avgLeverage(legs).toFixed(2)}x effective</span>
-          </div>
-          <Basket legs={legs} markets={byId} />
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Market</th>
-                  <th>Side</th>
-                  <th>Weight</th>
-                  <th>Leverage</th>
-                  <th>Position</th>
-                  <th>Unrealized PnL</th>
-                </tr>
-              </thead>
-              <tbody>
-                {legs.map((l) => {
-                  const p = positions.find((x) => x.marketId === l.marketId);
-                  return (
-                    <tr key={l.marketId}>
-                      <td>
-                        <strong>{legLabel(l, byId)}</strong>
-                      </td>
-                      <td className={l.isLong ? "pos" : "neg"}>{l.isLong ? "Long" : "Short"}</td>
-                      <td>{l.weightBps / 100}%</td>
-                      <td>{l.leverageX10 / 10}x</td>
-                      <td>{p ? formatUsd(p.value) : <span className="muted">Pending</span>}</td>
-                      <td className={p ? (p.unrealizedPnl >= 0 ? "pos" : "neg") : "muted"}>{p ? formatUsd(p.unrealizedPnl) : "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {accountSet && (
-            <div className="muted small">
-              Lighter account #{accountIndex.toString()}
-              {lighter.data && ` · equity ${formatUsd(lighter.data.equity)}`} ·{" "}
-              <Link href={`/lighter/${accountIndex.toString()}?coin=${encodeURIComponent(symbol)}`} style={{ color: "var(--blue-600)", fontWeight: 600 }}>
-                View positions on Lighter →
-              </Link>
-            </div>
-          )}
-        </div>
-
-        {poolId && treasury && (
-          <CoinActivity token={token} poolId={poolId} symbol={symbol} usdPerEth={usdPerEth} creator={coin.data.creator} treasury={treasury} />
-        )}
-
-        <div className="stats" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
-          <Stat k="Fees earned" v={ethStr(fees) + usd(fees)} />
-          <Stat k="Margin sent to Lighter" v={ethStr(bridged) + usd(bridged)} />
-          <Stat k="Waiting for Lighter" v={ethStr(reserve) + usd(reserve)} />
-          <Stat k="Bought back" v={ethStr(bought) + usd(bought)} />
-          <Stat k="Burned" v={`${compact(burnedTotal)} ${symbol}`} />
-          <Stat k="Fees waiting to collect" v={ethStr(pendingFees) + usd(pendingFees)} />
-          {creatorPaid.data !== undefined && <Stat k="Earned by creator (1%)" v={ethStr(creatorPaid.data) + usd(creatorPaid.data)} />}
+        <div className="cpg-price">
+          <div className="mono">{formatUsd(price, price < 0.01 ? 8 : 4)}</div>
+          <div className="muted small">market cap {formatUsd(mcapUsd, 0)}</div>
+          <ShareButtons token={token} name={name} symbol={symbol} handle={xHandle(profile?.x)} />
         </div>
       </div>
 
-      <aside style={{ position: "sticky", top: 88 }}>
-        <TradePanel token={token} symbol={symbol} feeBps={feeBps} poolKey={poolKey.data} hook={hookAddress.data} poolId={poolId} />
-      </aside>
+      <div className="cpg-kpis">
+        <div>
+          <span>Market cap</span>
+          <b>{usdFmt(mcapUsd)}</b>
+          <small>live price</small>
+        </div>
+        <div>
+          <span>Volume</span>
+          <b>{volume && usdPerEth ? usdFmt(volume.volumeEth * usdPerEth) : platform.isLoading ? "…" : "—"}</b>
+          <small>{volume ? `${volume.trades.toLocaleString("en-US")} trades` : "all time"}</small>
+        </div>
+        <div>
+          <span>Fund value</span>
+          <b>{fundUsd !== undefined ? formatUsd(fundUsd) : bridged > 0n && usdPerEth ? usdFmt(ethNum(bridged) * usdPerEth) : "—"}</b>
+          <small>{fundUsd !== undefined ? "live on Lighter" : bridged > 0n ? "margin sent" : "not trading yet"}</small>
+        </div>
+        <div>
+          <span>Burned</span>
+          <b className="fire">{pct(burnedP)}</b>
+          <small>of supply</small>
+        </div>
+      </div>
+
+      <div className="cpg-body">
+        <div className="stack">
+          <div className="card card-soft row small">
+            <span className={`status-dot ${status.live ? "live" : ""}`} />
+            {status.text}
+          </div>
+
+          {isHiddenCoin(token) && <div className="alert small">This coin is not listed on Stakd. You reached it by direct link.</div>}
+
+          {profile?.description && <div className="card stack small coin-description">{profile.description}</div>}
+
+          {isCreator && <ProfileEditor token={token} metadata={METADATA} current={profile} onSaved={() => metaAll.refetch()} />}
+
+          {poolId && <LiveChart poolId={poolId} />}
+
+          <div className="card stack cpg-fund">
+            <div className="spread">
+              <h3>The fund</h3>
+              <span className="chip chip-soft">{avgLeverage(legs).toFixed(2)}x effective</span>
+            </div>
+            <div className="cpg-fund-in">
+              <div className="cpg-eq" style={{ background: legRing(legs) }}>
+                <div>
+                  <b>{fundUsd !== undefined ? formatUsd(fundUsd) : "—"}</b>
+                  <span>fund value</span>
+                </div>
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <Basket legs={legs} markets={byId} />
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Market</th>
+                        <th>Side</th>
+                        <th>Weight</th>
+                        <th>Leverage</th>
+                        <th>Position</th>
+                        <th>Unrealized PnL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {legs.map((l) => {
+                        const p = positions.find((x) => x.marketId === l.marketId);
+                        return (
+                          <tr key={l.marketId}>
+                            <td>
+                              <strong>{legLabel(l, byId)}</strong>
+                            </td>
+                            <td className={l.isLong ? "pos" : "neg"}>{l.isLong ? "Long" : "Short"}</td>
+                            <td>{l.weightBps / 100}%</td>
+                            <td>{l.leverageX10 / 10}x</td>
+                            <td>{p ? formatUsd(p.value) : <span className="muted">Pending</span>}</td>
+                            <td className={p ? (p.unrealizedPnl >= 0 ? "pos" : "neg") : "muted"}>{p ? formatUsd(p.unrealizedPnl) : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            {accountSet && (
+              <div className="cpg-lighter">
+                <i />
+                <span>
+                  Lighter account <b>#{accountIndex.toString()}</b>
+                  {lighter.data && (
+                    <>
+                      {" "}
+                      · equity <b>{formatUsd(lighter.data.equity)}</b>
+                    </>
+                  )}
+                </span>
+                <Link href={`/lighter/${accountIndex.toString()}?coin=${encodeURIComponent(symbol)}`}>View positions on Lighter →</Link>
+              </div>
+            )}
+            <div className="cpg-rules">
+              <div>
+                <b className="up">+10%</b>
+                <p>above its high → half the gain is locked in, and 75% of that buys and burns the coin</p>
+              </div>
+              <div>
+                <b className="dn">−35%</b>
+                <p>from its high → every position closes and the fund pauses</p>
+              </div>
+            </div>
+          </div>
+
+          {usdPerEth > 0 && <PriceCurve poolTokens={poolTokens} poolUsdc={poolEth * usdPerEth} launchSupply={1_000_000_000} />}
+
+          {poolId && treasury && (
+            <CoinActivity token={token} poolId={poolId} symbol={symbol} usdPerEth={usdPerEth} creator={coin.data.creator} treasury={treasury} />
+          )}
+
+          <div className="stats" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
+            <Stat k="Fees earned" v={ethStr(fees) + usd(fees)} />
+            <Stat k="Margin sent to Lighter" v={ethStr(bridged) + usd(bridged)} />
+            <Stat k="Waiting for Lighter" v={ethStr(reserve) + usd(reserve)} />
+            <Stat k="Bought back" v={ethStr(bought) + usd(bought)} />
+            <Stat k="Burned" v={`${compact(burnedTotal)} ${symbol}`} />
+            <Stat k="Fees waiting to collect" v={ethStr(pendingFees) + usd(pendingFees)} />
+            {creatorPaid.data !== undefined && <Stat k="Earned by creator (1%)" v={ethStr(creatorPaid.data) + usd(creatorPaid.data)} />}
+          </div>
+        </div>
+
+        <aside className="cpg-side">
+          <TradePanel token={token} symbol={symbol} feeBps={feeBps} poolKey={poolKey.data} hook={hookAddress.data} poolId={poolId} />
+          <div className="card cpg-burn">
+            <span className="eyebrow">Burned so far</span>
+            <div className="pctbig">{pct(burnedP)}</div>
+            <p className="muted small">
+              {compact(burnedTotal)} {symbol} destroyed forever
+            </p>
+          </div>
+          <div className="card cpg-facts">
+            {[
+              ["Leverage", `${avgLeverage(legs).toFixed(2)}x`],
+              ["Trading fee", `${feeBps / 100}%`],
+              ["Supply", "1,000,000,000"],
+              ["Liquidity", "locked forever"],
+              ["Paired with", "ETH"],
+              ["Profit burned", "75%"],
+              ["Stop-loss", "−35% from high"],
+            ].map(([k, v]) => (
+              <div key={k}>
+                <span>{k}</span>
+                <b>{v}</b>
+              </div>
+            ))}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
