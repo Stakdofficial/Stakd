@@ -36,11 +36,9 @@
 .h-orbit .ring { position: absolute; inset: 0; border-radius: 50%; border: 1px dashed var(--border-strong); animation: h-spin 60s linear infinite; }
 .h-orbit .ring.r2 { inset: 14%; animation-duration: 40s; animation-direction: reverse; border-style: solid; border-color: var(--border); }
 @keyframes h-spin { to { transform: rotate(360deg); } }
-.h-orbit .core { position: absolute; inset: 31%; border-radius: 50%; display: grid; place-items: center; text-align: center; color: #fff;
-  background: radial-gradient(circle at 35% 30%, #bae6fd, #60a5fa 35%, #1e3a8a 82%);
-  box-shadow: 0 0 120px rgba(96, 165, 250, 0.5), inset -10px -14px 30px rgba(0, 0, 0, 0.35); animation: h-bob 6s ease-in-out infinite; }
-.h-orbit .c-t { font: 900 28px var(--display); letter-spacing: -0.03em; }
-.h-orbit small { font: 600 10.5px var(--mono); letter-spacing: 0.12em; opacity: 0.8; }
+.h-orbit .core { position: absolute; inset: 31%; display: grid; place-items: center; animation: h-bob 6s ease-in-out infinite; }
+.h-orbit .core svg { width: 100%; height: 100%; border-radius: 27%;
+  box-shadow: 0 0 120px rgba(96, 165, 250, 0.5), 0 0 0 1px rgba(125, 211, 252, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
 @keyframes h-bob { 50% { transform: translateY(-10px); } }
 .h-orbit .sat { position: absolute; padding: 10px 14px; border-radius: 14px; background: rgba(10, 18, 38, 0.9); border: 1px solid var(--border-strong); backdrop-filter: blur(10px);
   font: 500 13px var(--mono); white-space: nowrap; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); animation: h-bob 7s ease-in-out infinite; }
@@ -351,4 +349,52 @@
   .cpg .table-wrap { overflow-x: auto; }
   .two-col { grid-template-columns: minmax(0, 1fr) !important; }
   .two-col > * { min-width: 0; }
+}
+
+/* hero: a real coin's live fund */
+.hf { position: relative; width: 100%; max-width: 470px; justify-self: center; min-height: 460px; }
+.hf-skeleton { border-radius: 28px; background: linear-gradient(160deg, rgba(96, 165, 250, 0.08), rgba(10, 18, 38, 0.4)); border: 1px solid var(--border); }
+.hf-card { position: relative; z-index: 3; display: block; color: var(--text); padding: 26px; border-radius: 28px;
+  background: radial-gradient(420px 240px at 85% -10%, rgba(96, 165, 250, 0.22), transparent 70%), linear-gradient(170deg, #0f1b38, #070e20);
+  border: 1px solid rgba(96, 165, 250, 0.3); box-shadow: 0 50px 120px rgba(0, 0, 0, 0.6), 0 0 90px rgba(59, 130, 246, 0.18);
+  animation: hf-float 7s ease-in-out infinite; transition: border-color 0.25s; }
+.hf-card:hover { border-color: rgba(125, 211, 252, 0.6); }
+@keyframes hf-float { 50% { transform: translateY(-8px); } }
+.hf-top { display: flex; align-items: center; gap: 14px; }
+.hf-av { position: relative; flex: none; border-radius: 50%; display: grid; place-items: center; }
+.hf-av::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: #0b1530; }
+.hf-av img, .hf-av em { position: absolute; inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); border-radius: 50%; object-fit: cover; z-index: 1; display: grid; place-items: center; font: 800 13px var(--mono); font-style: normal; }
+.hf-id { min-width: 0; }
+.hf-id b { display: block; font: 900 26px/1 var(--display); letter-spacing: -0.03em; }
+.hf-id span { color: var(--text-muted); font-size: 13px; }
+.hf-live { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; font: 500 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--green); padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(74, 222, 128, 0.35); background: var(--green-soft); }
+.hf-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); animation: h-blink 1.6s ease-in-out infinite; }
+.hf-eq { margin: 24px 0 18px; }
+.hf-eq span { font: 11px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint); }
+.hf-eq b { display: block; font: 700 44px/1.05 var(--mono); letter-spacing: -0.04em; margin-top: 6px; }
+.hf-eq em { font: 600 13px var(--mono); font-style: normal; }
+.hf-eq em.up, .hf-pos .up { color: var(--green); } .hf-eq em.dn, .hf-pos .dn { color: var(--red); }
+.hf-pos { display: grid; gap: 8px; }
+.hf-pos > div { display: grid; grid-template-columns: 58px 1fr auto auto; gap: 12px; align-items: center; padding: 11px 14px; border-radius: 14px; background: rgba(186, 210, 255, 0.04); border: 1px solid var(--border); font-family: var(--mono); font-size: 13.5px; }
+.hf-pos .side { font-size: 10.5px; font-weight: 600; text-align: center; padding: 3px 0; border-radius: 6px; }
+.hf-pos .side.l { background: var(--green-soft); color: var(--green); } .hf-pos .side.s { background: var(--red-soft); color: var(--red); }
+.hf-pos b { font-weight: 600; }
+.hf-pos .val { color: var(--text-muted); }
+.hf-pos .pnl { min-width: 70px; text-align: right; font-weight: 600; }
+.hf-wait { color: var(--text-faint); font: 13px var(--mono); padding: 10px 0; }
+.hf-foot { display: flex; align-items: flex-end; gap: 22px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.hf-foot span { display: block; font: 10px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+.hf-foot b { font: 700 17px var(--mono); letter-spacing: -0.02em; }
+.hf-foot .fire, .hf-ghost .fire { color: var(--fire); }
+.hf-foot .go { margin-left: auto; color: #7dd3fc; font-weight: 600; font-size: 14px; }
+.hf-ghost { position: absolute; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-radius: 20px; color: var(--text);
+  background: rgba(10, 18, 38, 0.85); border: 1px solid var(--border-strong); backdrop-filter: blur(8px); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); font-size: 13px; }
+.hf-ghost b { font: 800 16px var(--display); letter-spacing: -0.02em; }
+.hf-ghost.g0 { top: -38px; right: -34px; transform: rotate(4deg); animation: hf-float 8s ease-in-out infinite -2s; }
+.hf-ghost.g1 { bottom: -30px; left: -40px; transform: rotate(-4deg); animation: hf-float 9s ease-in-out infinite -4s; }
+.hf-ghost:hover { border-color: rgba(255, 122, 47, 0.5); }
+@media (max-width: 980px) {
+  .hf { margin-top: 50px; min-height: 0; }
+  .hf-ghost.g0 { right: -6px; } .hf-ghost.g1 { left: -6px; bottom: -40px; }
+  .hf-eq b { font-size: 36px; }
 }

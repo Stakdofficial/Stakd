@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { DcLogo, FomoLogo, GhLogo, TgLogo, XLogo } from "@/components/BrandLogos";
 import { CoinTile } from "@/components/CoinTile";
+import { LogoMark } from "@/components/Logo";
 import { MarketTiles } from "@/components/home/MarketTiles";
 import { BasketShowcase } from "@/components/landing/BasketShowcase";
 import { Reveal } from "@/components/landing/motion";
@@ -90,10 +91,7 @@ export default function Home() {
             <div className="ring" />
             <div className="ring r2" />
             <div className="core">
-              <div>
-                <div className="c-t">$COIN</div>
-                <small>OWNS A FUND</small>
-              </div>
+              <LogoMark size={180} />
             </div>
             <div className="sat s1">
               <span className="up">▲ NVDA</span> 40% · 2x
