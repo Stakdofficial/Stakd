@@ -12,6 +12,7 @@ import { fomoHandle } from "@/lib/fomo";
 import { profileLink } from "@/lib/links";
 import { chain, FACTORY, FOMO_ENABLED, LAUNCH_QUOTER, metadataAbi, metadataFor, TELEGRAM_ENABLED, TOKEN_DECIMALS } from "@/lib/config";
 import { useMarkets, type Leg } from "@/lib/hooks";
+import { legRing } from "@/lib/stats";
 import { formatUsd, type LighterMarket } from "@/lib/lighter";
 
 type DraftLeg = { marketId: number; isLong: boolean; weight: number; leverage: number };
@@ -283,14 +284,21 @@ export default function CreatePage() {
   const grouped = useMemo(() => groupMarkets(markets.data?.list ?? []), [markets.data]);
 
   return (
+    <div className="launch-page">
+      <div className="lp-head">
+        <span className="eyebrow">Launch</span>
+        <h1 className="lp-title">
+          Build your
+          <br />
+          <span className="gradient-text">coin&apos;s fund.</span>
+        </h1>
+        <p className="lp-sub">
+          Name it, pick what it trades, and choose who earns from it. It takes about a minute, and you don&apos;t need any
+          ETH, only gas.
+        </p>
+      </div>
     <div className="two-col">
       <div className="stack">
-        <div>
-          <h1>Create a coin</h1>
-          <p className="muted" style={{ margin: "6px 0 0" }}>
-            Design the basket your coin&apos;s fees will trade on Lighter.
-          </p>
-        </div>
 
         {creatorFeePct > 0 && (
           <div className="earn-banner">
@@ -302,6 +310,7 @@ export default function CreatePage() {
           </div>
         )}
 
+        <StepHead n={1} title="Name it" />
         <div className="card grid" style={{ gridTemplateColumns: "2fr 1fr" }}>
           <div>
             <label className="label">Name</label>
@@ -382,6 +391,7 @@ export default function CreatePage() {
           )}
         </div>
 
+        <StepHead n={2} title="Build the fund" note={`${legs.length} / ${MAX_LEGS} markets`} />
         <div className="card stack">
           <div className="spread">
             <h3>Basket</h3>
@@ -466,7 +476,8 @@ export default function CreatePage() {
           </div>
         </div>
 
-        <div className="card grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+        <StepHead n={3} title="Fees, earnings & first buy" />
+        <div className="card grid lp-fees" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
           <div>
             <label className="label">Trading fee {feePct}%</label>
             <input type="range" min={1} max={5} step={0.5} value={feePct} onChange={(e) => setFeePct(Number(e.target.value))} />
@@ -588,19 +599,22 @@ export default function CreatePage() {
         </div>
       </div>
 
-      <aside className="card stack" style={{ position: "sticky", top: 88 }}>
-        <div className="row">
-          <div className="avatar" style={{ overflow: "hidden", padding: 0 }}>
+      <aside className="card stack lp-preview" style={{ position: "sticky", top: 96 }}>
+        <span className="eyebrow">Live preview</span>
+        <div className="row" style={{ gap: 16 }}>
+          <div className="lp-ring" style={{ background: legRing(chainLegs) }}>
             {profile.image ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={profile.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <img src={profile.image} alt="" />
             ) : (
-              (symbol || "??").slice(0, 2)
+              <span>{(symbol || "??").slice(0, 2)}</span>
             )}
           </div>
-          <div>
-            <strong>{name || "Your coin"}</strong>
-            <div className="muted small">${symbol || "TICKER"} on {chain.name}</div>
+          <div style={{ minWidth: 0 }}>
+            <div className="lp-tk">${symbol || "TICKER"}</div>
+            <div className="muted small">
+              {name || "Your coin"} · {chain.name}
+            </div>
           </div>
         </div>
         <Basket legs={chainLegs} markets={byId} />
@@ -613,7 +627,20 @@ export default function CreatePage() {
         <Summary label="Profit to buyback & burn" value="75%" />
         <div className="divider" />
 
-        {problems.length > 0 && <div className="alert small">{problems[0]}</div>}
+        <div className="lp-checks">
+          {problems.length === 0 ? (
+            <div className="ok">
+              <i>✓</i>Everything&apos;s set. Ready to launch.
+            </div>
+          ) : (
+            problems.map((p) => (
+              <div key={p} className="no">
+                <i>•</i>
+                {p}
+              </div>
+            ))
+          )}
+        </div>
         {error && <div className="alert alert-error small">{error}</div>}
 
         {!isConnected ? (
@@ -623,12 +650,23 @@ export default function CreatePage() {
         ) : null}
 
         <button className="btn btn-primary btn-block" disabled={!isConnected || chainId !== chain.id || !canLaunch || problems.length > 0 || !!step} onClick={launch}>
-          {step ?? "Launch coin"}
+          {step ?? "Launch coin 🚀"}
         </button>
         <p className="muted small" style={{ margin: 0 }}>
           Perpetuals are high risk. Positions can be liquidated and margin lost.
         </p>
       </aside>
+    </div>
+    </div>
+  );
+}
+
+function StepHead({ n, title, note }: { n: number; title: string; note?: string }) {
+  return (
+    <div className="lp-step">
+      <span className="lp-num">{n}</span>
+      <h2>{title}</h2>
+      {note && <small>{note}</small>}
     </div>
   );
 }

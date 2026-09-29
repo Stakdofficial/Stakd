@@ -1,6 +1,6 @@
 import { createPublicClient, formatUnits, http, type Address, type Hex } from "viem";
 import { factoryAbi, hookAbi, tokenAbi, treasuryAbi } from "@/lib/abis";
-import { ALL_FACTORIES, chain, metadataAbi, metadataFor, POOL_MANAGER, poolManagerAbi, TOKEN_DECIMALS } from "@/lib/config";
+import { ALL_FACTORIES, chain, metadataAbi, metadataCandidates, POOL_MANAGER, poolManagerAbi, TOKEN_DECIMALS, usableImage } from "@/lib/config";
 import type { Leg } from "@/lib/hooks";
 import { ethPerToken, POOL_STATE_SLOTS, poolStateSlot, sqrtPriceFromSlots } from "@/lib/pool";
 
@@ -52,7 +52,7 @@ export async function getCoinSummary(token: Address): Promise<CoinSummary | null
     read<bigint>({ address: treasury, abi: treasuryAbi, functionName: "totalFeesReceived" }),
     read<bigint>({ address: treasury, abi: treasuryAbi, functionName: "totalTokensBurned" }),
     read<readonly Hex[]>({ address: POOL_MANAGER, abi: poolManagerAbi, functionName: "extsload", args: [poolStateSlot(poolId), POOL_STATE_SLOTS] }),
-    read<{ image?: string }>({ address: metadataFor(FACTORY), abi: metadataAbi, functionName: "metadata", args: [token] }),
+    firstProfileImage(FACTORY, token),
   ]);
 
   const [usdPerEth, markets, creatorBps] = await Promise.all([
@@ -66,7 +66,7 @@ export async function getCoinSummary(token: Address): Promise<CoinSummary | null
   return {
     name,
     symbol,
-    image: await cardImage(meta.image ?? ""),
+    image: await cardImage(meta ?? ""),
     priceUsd,
     marketCapUsd: priceUsd * Number(formatUnits(supply, TOKEN_DECIMALS)),
     feePct: pool[1] / 100,
@@ -117,4 +117,14 @@ async function marketSymbols(): Promise<Map<number, string>> {
   } catch {
     return new Map();
   }
+}
+
+/** The first usable profile image among the metadata contracts a coin's profile could be in. */
+async function firstProfileImage(factory: Address, token: Address): Promise<string | undefined> {
+  for (const address of metadataCandidates(factory)) {
+    const m = (await client.readContract({ address, abi: metadataAbi, functionName: "metadata", args: [token] }).catch(() => null)) as { image?: string } | null;
+    const img = usableImage(m?.image);
+    if (img) return img;
+  }
+  return undefined;
 }
